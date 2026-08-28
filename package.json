@@ -1,0 +1,14 @@
+{
+  "name": "mtj-channel-manager",
+  "version": "1.0.0",
+  "description": "MTJ Channel Manager — Operational Mini-ERP for PT Monalisa Tunggal Jaya (Blueprint V2.0)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "seed": "node seed.js",
+    "test": "node test.js"
+  },
+  "engines": { "node": ">=22" },
+  "license": "UNLICENSED",
+  "private": true
+}

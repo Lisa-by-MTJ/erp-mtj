@@ -1,0 +1,16 @@
+# Runtime data — never commit business data
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Container image exports (rebuild from Containerfile instead)
+*.tar.gz
+
+# Node
+node_modules/
+package-lock.json
+
+# Environment / secrets
+.env
+.env.*
