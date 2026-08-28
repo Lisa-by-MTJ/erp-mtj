@@ -11,7 +11,7 @@ async function api(path, opts) {
 }
 function toast(msg, err) {
   const t = $('#toast');
-  t.textContent = msg; t.style.borderColor = err ? '#f87171' : '#2dd4bf'; t.style.display = 'block';
+  t.textContent = msg; t.classList.toggle('err', !!err); t.style.display = 'block';
   setTimeout(() => t.style.display = 'none', 4200);
 }
 const badge = s => `<span class="badge b-${String(s).replace(/\s/g,'_')}">${String(s).replace(/_/g,' ')}</span>`;
@@ -306,5 +306,15 @@ window.go = async v => {
   document.querySelectorAll('nav a').forEach(a => a.classList.toggle('on', a.dataset.v === v));
   try { await views[v](); } catch (e) { main.innerHTML = `<h1>Error</h1><pre>${e.message}</pre>`; }
 };
+// session header (user + logout) — injected above every view
+(async () => {
+  try {
+    const s = await api('/session');
+    const h = document.createElement('div');
+    h.id = 'whoami';
+    h.innerHTML = `Signed in as <b>${s.user}</b><button id="logout" onclick="location.href='/logout'">Log out</button>`;
+    main.before(h);
+  } catch (e) { /* not logged in — /login will handle */ }
+})();
 document.querySelectorAll('nav a').forEach(a => a.onclick = () => go(a.dataset.v));
 go('dash');

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MTJ Channel Manager — Sign in</title>
+<style>
+:root{--paper:#f2efe7;--ink:#161412;--mut:#6f6a61;--line:#c9c3b6}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--paper);color:var(--ink);font:15px/1.5 'Segoe UI',system-ui,sans-serif;
+  display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px}
+.frame{max-width:400px;width:100%;text-align:center}
+.kicker{font-family:ui-monospace,'Cascadia Mono',Consolas,monospace;font-size:10.5px;
+  letter-spacing:.32em;color:var(--mut);text-transform:uppercase}
+h1{font-family:Georgia,'Times New Roman',serif;font-style:italic;font-weight:600;
+  font-size:31px;letter-spacing:.01em;margin:10px 0 2px}
+.rule{width:210px;margin:18px auto;border:none;border-top:3px double var(--ink)}
+.box{border:1px solid var(--ink);background:var(--paper);padding:30px 30px 26px;text-align:left}
+label{display:block;font-family:ui-monospace,monospace;font-size:10px;letter-spacing:.22em;
+  text-transform:uppercase;color:var(--mut);margin:0 0 6px}
+input{width:100%;background:transparent;border:none;border-bottom:1px solid var(--ink);
+  color:var(--ink);font:15px/1.4 inherit;padding:7px 2px;outline:none;border-radius:0}
+input:focus{border-bottom-width:2px}
+.f{margin-bottom:20px}
+button{width:100%;margin-top:6px;background:var(--ink);color:var(--paper);border:1px solid var(--ink);
+  padding:11px 16px;font-family:ui-monospace,monospace;font-size:11.5px;letter-spacing:.28em;
+  text-transform:uppercase;cursor:pointer}
+button:hover{background:transparent;color:var(--ink)}
+.err{border:1px solid var(--ink);background:var(--paper);padding:9px 12px;margin-bottom:18px;
+  font-family:ui-monospace,monospace;font-size:11.5px;letter-spacing:.14em;text-transform:uppercase}
+.foot{margin-top:22px;font-family:ui-monospace,monospace;font-size:9.5px;letter-spacing:.26em;
+  text-transform:uppercase;color:var(--mut)}
+.foot b{color:var(--ink);font-weight:600}
+</style>
+</head>
+<body>
+<div class="frame">
+  <div class="kicker">PT Monalisa Tunggal Jaya · est. 1980</div>
+  <h1>MTJ Channel Manager</h1>
+  <div class="kicker">Your Potential. Our Passion.</div>
+  <hr class="rule">
+  <form class="box" method="POST" action="/login">
+    <div class="err" id="err" style="display:none">Invalid username or password</div>
+    <div class="f"><label>Username</label><input name="username" autocomplete="username" autofocus required></div>
+    <div class="f"><label>Password</label><input name="password" type="password" autocomplete="current-password" required></div>
+    <button type="submit">Sign in</button>
+  </form>
+  <div class="foot"><b>Lighting · Audio · LED Visual</b> — internal system</div>
+</div>
+<script>if(new URLSearchParams(location.search).get('e'))document.getElementById('err').style.display='block';</script>
+</body>
+</html>
