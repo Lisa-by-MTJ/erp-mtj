@@ -61,17 +61,62 @@ views.stock = async () => {
   const rows = await api('/stock');
   main.innerHTML = `<h1>Stock &amp; Inventory</h1>
   <div class="sub">§18 Available = Physical − Reserved · §20 every change is a stock movement</div>
+  <button class="btn" onclick="const f=document.getElementById('pform');f.classList.toggle('open');if(f.classList.contains('open'))f.querySelector('input').focus()">＋ Tambah Barang</button>
+  <div class="formbox" id="pform">
+    <b>Master Barang Baru</b>
+    <form onsubmit="return addProduct(event)">
+      <div class="row">
+        <div style="flex:1"><label>SKU / Kode *</label><input name="code" required placeholder="AZT-MH350BSW"></div>
+        <div style="flex:2"><label>Nama Barang *</label><input name="name" required placeholder="Moving Head Beam 350"></div>
+        <div style="flex:1"><label>Merek</label><input name="brand" placeholder="AZTEC"></div>
+        <div style="flex:1"><label>Model</label><input name="model"></div>
+      </div>
+      <div class="row">
+        <div style="flex:1"><label>Tipe</label><select name="type">
+          <option value="FINISHED_GOODS">FINISHED_GOODS</option><option value="SPAREPART">SPAREPART</option>
+          <option value="MATERIAL">MATERIAL</option><option value="ACCESSORIES">ACCESSORIES</option>
+          <option value="ASSET">ASSET</option></select></div>
+        <div style="flex:1"><label>Kategori</label><input name="category" placeholder="lighting"></div>
+        <div style="flex:.6"><label>Satuan</label><input name="uom" value="PCS"></div>
+        <div style="flex:1"><label>Kebijakan Serial</label><select name="serial_policy">
+          <option value="NONE">NONE</option><option value="REQUIRED">REQUIRED</option><option value="BATCH">BATCH</option></select></div>
+        <div style="flex:.7"><label>Garansi (bln)</label><input name="warranty_months" type="number" value="12" min="0"></div>
+      </div>
+      <div class="row">
+        <div style="flex:1"><label>Harga Modal (Rp)</label><input name="cost_price" type="number" min="0" value="0"></div>
+        <div style="flex:1"><label>Harga Retail (Rp)</label><input name="retail_price" type="number" min="0" value="0"></div>
+        <div style="flex:1"><label>Harga Project (Rp)</label><input name="project_price" type="number" min="0" value="0"></div>
+        <div style="flex:.6"><label>Min. Stock</label><input name="min_stock" type="number" min="0" value="0"></div>
+        <div style="flex:.6"><label>Reorder</label><input name="reorder_point" type="number" min="0" value="0"></div>
+        <div style="display:flex;align-items:flex-end"><button class="btn" type="submit">Simpan</button></div>
+      </div>
+    </form>
+    <div class="mut" style="font-size:11px">* wajib. Barang baru belum punya stok — masukkan lewat Purchase Order → Receiving.</div>
+  </div>
   <table><tr><th>Code</th><th>Product</th><th>Warehouse</th><th class="money">Physical</th>
   <th class="money">Reserved</th><th class="money">Available</th><th class="money">Value</th></tr>
   ${rows.map(r => `<tr><td>${r.code}</td><td>${r.name} <span class="mut">${r.brand||''}</span></td><td>${r.wh_name}</td>
     <td class="money">${r.physical}</td><td class="money">${r.reserved}</td>
-    <td class="money"><b style="color:${r.available<=0?'#f87171':'#4ade80'}">${r.available}</b></td>
+    <td class="money"><b class="${r.available<=0?'low':'ok'}">${r.available}</b></td>
     <td class="money">${fmt(r.stock_value)}</td></tr>`).join('')}</table>
   <h2>Recent Movements (§20)</h2>
   <table><tr><th>ID</th><th>Type</th><th>Product</th><th>Wh</th><th class="money">ΔQty</th><th>Ref</th></tr>
   ${(await api('/movements')).slice(0,15).map(m => `<tr><td>${m.id}</td><td>${m.movement_type}</td>
-    <td>${m.pcode}</td><td>${m.wh_name}</td><td class="money" style="color:${m.qty_delta<0?'#f87171':'#4ade80'}">${m.qty_delta}</td>
+    <td>${m.pcode}</td><td>${m.wh_name}</td><td class="money ${m.qty_delta<0?'low':'ok'}">${m.qty_delta}</td>
     <td class="mut">${m.ref_no||''}</td></tr>`).join('')}</table>`;
+};
+window.addProduct = async ev => {
+  ev.preventDefault();
+  const f = ev.target, b = Object.fromEntries(new FormData(f).entries());
+  ['warranty_months','cost_price','retail_price','project_price','min_stock','reorder_point']
+    .forEach(k => b[k] = Number(b[k] || 0));
+  try {
+    const r = await api('/products', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(b) });
+    toast(`Barang baru tersimpan (ID ${r.id}) — masukkan stok via Purchase Order → Receiving`);
+    f.reset(); document.getElementById('pform').classList.remove('open');
+  } catch (e) { toast(e.message, true); }
+  return false;
 };
 
 views.docs = async () => {
@@ -202,7 +247,7 @@ views.projects = async () => {
   <th class="money">Billed</th><th class="money">Outstanding</th><th class="money">Cost</th><th>Status</th><th></th></tr>
   ${list.map(p => `<tr><td><b>${p.project_code}</b></td><td>${p.name}</td><td>${p.customer_name}</td>
    <td class="money">${fmt(p.contract_value)}</td><td class="money">${fmt(p.billing_total)}</td>
-   <td class="money" style="color:${p.outstanding>0?'#f59e0b':'#4ade80'}">${fmt(p.outstanding)}</td>
+   <td class="money ${p.outstanding>0?'low':'ok'}">${fmt(p.outstanding)}</td>
    <td class="money">${fmt(p.cost_total)}</td><td>${badge(p.status)}</td>
    <td><button class="btn sm gray" onclick="tower(${p.id})">Tower</button></td></tr>`).join('')}</table>`;
 };
