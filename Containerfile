@@ -13,8 +13,10 @@ COPY package.json server.js db.js approval.js posting.js dashboard.js api.js web
 COPY ui ./ui
 
 # data dir is expected as a volume so the SQLite DB survives container replacement
-RUN mkdir -p /app/data && chown -R node:node /app
-USER node
+# NOTE: run as container-root on purpose. Under ROOTLESS podman, container root maps to
+# the host user's uid, which owns the bind-mounted data dir. A non-root container user
+# would map to an unrelated subuid and lose write access ("readonly database").
+RUN mkdir -p /app/data
 
 EXPOSE 9121
 ENV MTJ_BIND=0.0.0.0 MTJ_PORT=9121 MTJ_DATA_DIR=/app/data
