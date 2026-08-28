@@ -50,6 +50,6 @@ systemctl --user stop mtj-erp && cp data/mtj_erp.db /backup/ && systemctl --user
 ```
 
 ## Notes
-- Auth stays INSIDE the app (Basic Auth mtj/REDACTED) — no dependency on host nginx etc.
+- Auth stays INSIDE the app (Basic Auth via MTJ_USER/MTJ_PASS env vars) — no dependency on host nginx etc.
 - Image runs as non-root user `node`; keep the mounted data dir owned by uid 1000.
 - The cloudflared tunnel itself does NOT need to be containerized — it just points at port 9121.

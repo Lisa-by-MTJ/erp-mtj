@@ -6,8 +6,12 @@ const path = require('node:path');
 const api = require('./api.js');
 
 const UI_DIR = path.join(__dirname, 'ui');
-const USER = 'mtj';
-const PASS = 'REDACTED';
+const USER = process.env.MTJ_USER;
+const PASS = process.env.MTJ_PASS;
+if (!USER || !PASS) {
+  console.error('[MTJ-ERP] MTJ_USER and MTJ_PASS env vars are required (e.g. via --env-file .env)');
+  process.exit(1);
+}
 const EXPECTED = 'Basic ' + Buffer.from(USER + ':' + PASS).toString('base64');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript',
   '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon' };

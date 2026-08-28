@@ -1,7 +1,7 @@
 // Demo business cycle through the live ERP API (local port, same handlers as public)
 'use strict';
 const base = 'http://127.0.0.1:9121/api';
-const auth = 'Basic ' + Buffer.from('mtj:REDACTED').toString('base64');
+const auth = 'Basic ' + Buffer.from(`${process.env.MTJ_USER || 'mtj'}:${process.env.MTJ_PASS || ''}`).toString('base64');
 async function call(path, method = 'GET', bodyObj) {
   const r = await fetch(base + path, { method, headers: {
     Authorization: auth, 'Content-Type': 'application/json' },
