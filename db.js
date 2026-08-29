@@ -8,6 +8,8 @@ const fs = require('node:fs');
 
 const DATA_DIR = process.env.MTJ_DATA_DIR || path.join(__dirname, 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
+const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
+fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 const DB_PATH = path.join(DATA_DIR, 'mtj_erp.db');
 
 const db = new DatabaseSync(DB_PATH);
@@ -140,6 +142,17 @@ CREATE TABLE IF NOT EXISTS reservations (
 CREATE TABLE IF NOT EXISTS reservation_lines (
   id INTEGER PRIMARY KEY AUTOINCREMENT, reservation_id INTEGER NOT NULL REFERENCES reservations(id) ON DELETE CASCADE,
   product_id INTEGER NOT NULL REFERENCES products(id), qty REAL NOT NULL);
+-- §21 Stock Transfer: two-legged inter-warehouse movement (TRANSFER_OUT at source, TRANSFER_IN at destination)
+CREATE TABLE IF NOT EXISTS stock_transfers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, doc_no TEXT UNIQUE NOT NULL, status TEXT NOT NULL DEFAULT 'DRAFT',
+  version INTEGER DEFAULT 1, transfer_date TEXT NOT NULL,
+  from_warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+  to_warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+  created_by INTEGER, approved_by INTEGER, posted_at TEXT, note TEXT,
+  created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')));
+CREATE TABLE IF NOT EXISTS stock_transfer_lines (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, stock_transfer_id INTEGER NOT NULL REFERENCES stock_transfers(id) ON DELETE CASCADE,
+  product_id INTEGER NOT NULL REFERENCES products(id), qty REAL NOT NULL, serials TEXT DEFAULT '[]');
 -- §20 every inventory change emits a movement; engine-only writes
 CREATE TABLE IF NOT EXISTS stock_movements (
   id INTEGER PRIMARY KEY AUTOINCREMENT, movement_type TEXT NOT NULL,
@@ -344,6 +357,6 @@ function snTrail(serialId) { // full traceability §56
   return sn;
 }
 
-module.exports = { db, DB_PATH, PPN_RATE, nextDocNo, audit, getBalance, totalsForProduct,
+module.exports = { db, DB_PATH, UPLOAD_DIR, PPN_RATE, nextDocNo, audit, getBalance, totalsForProduct,
                    moveStock, createReservation, releaseReservation, registerSerialsAtReceiving,
                    snTrail, runExclusive };

@@ -95,6 +95,15 @@ function start(port) {
       if (p === '/api/session') return send(res, 200, JSON.stringify({ user: USER }));
 
       if (p.startsWith('/api/')) return api.handle(req, res, url);
+      if (p.startsWith('/uploads/')) { // product photos etc., stored under data/uploads
+        const rel = p.replace(/^\/uploads\//, '').replace(/\.\./g, '');
+        const full = path.join(process.env.MTJ_DATA_DIR || path.join(__dirname, 'data'), 'uploads', rel);
+        if (!fs.existsSync(full)) return send(res, 404, 'Not found', 'text/plain');
+        const emime = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+          '.gif': 'image/gif', '.webp': 'image/webp' }[path.extname(full).toLowerCase()];
+        return send(res, 200, fs.readFileSync(full), emime || 'application/octet-stream',
+          { 'Cache-Control': 'public, max-age=86400' });
+      }
       let file = p === '/' ? '/index.html' : p;
       file = file.replace(/\.\./g, '');
       const full = path.join(UI_DIR, file);

@@ -125,7 +125,41 @@ function postDeliveryOrder(id, userId) {
   return setPosted('delivery_orders', id, userId);
 }
 
-const POSTERS = { receivings: postReceiving, sales_orders: postSalesOrder, delivery_orders: postDeliveryOrder };
+const POSTERS = { receivings: postReceiving, sales_orders: postSalesOrder, delivery_orders: postDeliveryOrder,
+                  stock_transfers: postStockTransfer };
+
+// ---------------- Stock Transfer (§21) — TRANSFER_OUT at source, TRANSFER_IN at destination ----------------
+function postStockTransfer(id, userId) {
+  const t = doc('stock_transfers', id);
+  if (t.status !== 'APPROVED') throw new Error('Only APPROVED transfers can be posted');
+  if (t.from_warehouse_id === t.to_warehouse_id) throw new Error('Transfer source and destination must differ');
+  const lines = db.prepare(`SELECT tl.*, p.serial_policy, p.code pcode FROM stock_transfer_lines tl
+    JOIN products p ON p.id=tl.product_id WHERE tl.stock_transfer_id=?`).all(id);
+  for (const l of lines) {
+    // OUT leg at source
+    moveStock({ productId: l.product_id, warehouseId: t.from_warehouse_id, qtyDelta: -l.qty,
+                type: 'TRANSFER_OUT', refTable: 'stock_transfers', refId: id, refNo: t.doc_no, userId });
+    // IN leg at destination (cost travels with the goods — avg_cost from source balance)
+    const srcBal = db.prepare(`SELECT avg_cost FROM inventory_balances WHERE product_id=? AND warehouse_id=?`)
+      .get(l.product_id, t.from_warehouse_id);
+    moveStock({ productId: l.product_id, warehouseId: t.to_warehouse_id, qtyDelta: l.qty,
+                type: 'TRANSFER_IN', refTable: 'stock_transfers', refId: id, refNo: t.doc_no, userId,
+                avgCost: srcBal ? srcBal.avg_cost : null });
+    // Serial handoff: move listed serials to destination warehouse
+    for (const s of JSON.parse(l.serials || '[]')) {
+      const sn = db.prepare(`SELECT * FROM serial_numbers WHERE product_id=? AND serial=?`).get(l.product_id, s);
+      if (!sn) throw new Error(`${l.pcode}: serial ${s} not registered`);
+      if (sn.current_warehouse_id !== t.from_warehouse_id)
+        throw new Error(`${l.pcode}: serial ${s} is not in the source warehouse`);
+      if (!['IN_STOCK', 'RESERVED'].includes(sn.status))
+        throw new Error(`${l.pcode}: serial ${s} not transferable (${sn.status})`);
+      db.prepare(`UPDATE serial_numbers SET current_warehouse_id=? WHERE id=?`).run(t.to_warehouse_id, sn.id);
+    }
+  }
+  audit(userId, 'stock_transfers', 'STOCK_MOVED', { docNo: t.doc_no, entity: id,
+    newv: `${lines.length} lines: wh#${t.from_warehouse_id} -> wh#${t.to_warehouse_id}` });
+  return setPosted('stock_transfers', id, userId);
+}
 
 // Generic POST gate — approved docs only; unknown tables just get stamped (quotations etc.)
 function post(table, id, userId) {

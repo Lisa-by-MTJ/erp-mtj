@@ -60,7 +60,7 @@ views.dash = async () => {
 views.stock = async () => {
   const rows = await api('/stock');
   main.innerHTML = `<h1>Stock &amp; Inventory</h1>
-  <div class="sub">§18 Available = Physical − Reserved · §20 every change is a stock movement</div>
+  <div class="sub">§18 Available = Physical − Reserved · §20 every change is a stock movement · klik kode barang untuk detail</div>
   <button class="btn" onclick="const f=document.getElementById('pform');f.classList.toggle('open');if(f.classList.contains('open'))f.querySelector('input').focus()">＋ Tambah Barang</button>
   <div class="formbox" id="pform">
     <b>Master Barang Baru</b>
@@ -70,6 +70,7 @@ views.stock = async () => {
         <div style="flex:2"><label>Nama Barang *</label><input name="name" required placeholder="Moving Head Beam 350"></div>
         <div style="flex:1"><label>Merek</label><input name="brand" placeholder="AZTEC"></div>
         <div style="flex:1"><label>Model</label><input name="model"></div>
+        <div style="flex:1"><label>EAN / Barcode</label><input name="barcode" placeholder="8991234567890"></div>
       </div>
       <div class="row">
         <div style="flex:1"><label>Tipe</label><select name="type">
@@ -93,9 +94,9 @@ views.stock = async () => {
     </form>
     <div class="mut" style="font-size:11px">* wajib. Barang baru belum punya stok — masukkan lewat Purchase Order → Receiving.</div>
   </div>
-  <table><tr><th>Code</th><th>Product</th><th>Warehouse</th><th class="money">Physical</th>
+  <table><tr><th>Code</th><th>Product</th><th>EAN</th><th>Warehouse</th><th class="money">Physical</th>
   <th class="money">Reserved</th><th class="money">Available</th><th class="money">Value</th></tr>
-  ${rows.map(r => `<tr><td>${r.code}</td><td>${r.name} <span class="mut">${r.brand||''}</span></td><td>${r.wh_name}</td>
+  ${rows.map(r => `<tr><td><a href="#" onclick="go('item-${r.product_id}');return false" style="color:inherit"><b>${r.code}</b></a></td><td>${r.name} <span class="mut">${r.brand||''}</span></td><td class="mut">${r.barcode||'—'}</td><td>${r.wh_name}</td>
     <td class="money">${r.physical}</td><td class="money">${r.reserved}</td>
     <td class="money"><b class="${r.available<=0?'low':'ok'}">${r.available}</b></td>
     <td class="money">${fmt(r.stock_value)}</td></tr>`).join('')}</table>
@@ -121,14 +122,15 @@ window.addProduct = async ev => {
 
 views.docs = async () => {
   const kinds = [['purchase_orders','Purchase Orders'],['receivings','Warehouse Receiving'],
+                 ['stock_transfers','Stock Transfers'],
                  ['quotations','Quotations'],['sales_orders','Sales Orders']];
   let html = `<h1>Purchase &amp; Sales Documents</h1><div class="sub">§11 lifecycle: DRAFT → SUBMITTED → APPROVED → POSTED (locked)</div>`;
   for (const [t, label] of kinds) {
     const list = await api('/docs/' + t);
-    html += `<h2>${label}</h2><table><tr><th>Doc No</th><th>Partner</th><th>Date</th>
-      <th class="money">Total</th><th>Status</th><th>Actions</th></tr>` +
-      list.slice(0, 12).map(d => `<tr><td><b>${d.doc_no}</b></td><td>${d.partner_name||'—'}</td><td>${d.po_date||d.receive_date||d.quote_date||d.so_date||''}</td>
-        <td class="money">${fmt(d.grand_total || d.goods_value)}</td><td>${badge(d.status)}</td>
+    html += `<h2>${label}</h2><table><tr><th>Doc No</th><th>Partner / Route</th><th>Date</th>
+      <th>Status</th><th>Actions</th></tr>` +
+      list.slice(0, 12).map(d => `<tr><td><b>${d.doc_no}</b></td><td>${d.partner_name||d.from_name+' → '+d.to_name||'—'}</td><td>${d.po_date||d.receive_date||d.quote_date||d.so_date||d.transfer_date||''}</td>
+        <td>${badge(d.status)}</td>
         <td>${wfBtns(t, d)}</td></tr>`).join('') + '</table>';
   }
   main.innerHTML = html;
@@ -344,12 +346,141 @@ views.audit = async () => {
   ${rowsL.map(a => `<tr><td class="mut">${a.at}</td><td>${a.module}</td><td>${a.doc_no||''}</td><td><b>${a.action}</b></td></tr>`).join('')}</table>`;
 };
 
+// ---------------- Item Detail (§18) + EAN + photo ----------------
+views.item = async id => {
+  const d = await api('/products/' + id + '/detail');
+  const p = d.product;
+  main.innerHTML = `
+  <button class="btn gray sm" onclick="go('stock')">← Stock</button>
+  <div style="display:flex;gap:18px;align-items:flex-start;margin-top:14px">
+    <div style="width:170px;flex-shrink:0">
+      ${p.photo_url
+        ? `<img src="${p.photo_url}" alt="${p.code}" style="width:170px;border:1px solid var(--line);border-radius:10px;background:var(--card)">`
+        : `<div style="width:170px;height:130px;border:1px dashed var(--line);border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--mut);font-size:12px;background:var(--card)">no photo</div>`}
+      <input type="file" id="photo-file" accept="image/png,image/jpeg,image/gif,image/webp" style="display:none" onchange="upPhoto(${id})">
+      <button class="btn gray sm" style="width:100%;margin-top:6px" onclick="document.getElementById('photo-file').click()">📷 ${p.photo_url ? 'Ganti Foto' : 'Upload Foto'}</button>
+    </div>
+    <div style="flex:1">
+      <h1 style="margin-bottom:2px">${p.code} — ${p.name}</h1>
+      <div class="sub">${p.brand||''} ${p.model||''} · ${p.type} · ${p.category||'—'} · satuan ${p.uom} · serial: ${p.serial_policy} · garansi ${p.warranty_months} bln</div>
+      <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(160px,1fr));margin-top:10px">
+        <div class="kpi"><div class="lbl">Total Physical</div><div class="val">${d.totals.physical}</div></div>
+        <div class="kpi"><div class="lbl">Reserved</div><div class="val">${d.totals.reserved}</div></div>
+        <div class="kpi"><div class="lbl">Available</div><div class="val">${d.totals.available}</div></div>
+        <div class="kpi"><div class="lbl">Harga Retail</div><div class="val" style="font-size:16px">${fmt(p.retail_price)}</div></div>
+      </div>
+      <div class="formbox" style="margin-top:14px">
+        <b>EAN / Barcode</b>
+        <div class="row" style="margin-top:8px;align-items:flex-end">
+          <div style="flex:2"><input id="ean-input" value="${p.barcode||''}" placeholder="scan / ketik EAN lalu Enter"></div>
+          <div><button class="btn sm" onclick="saveEan(${id})">Simpan EAN</button></div>
+        </div>
+        <div class="mut" style="font-size:11px">EAN dipakai untuk lookup cepat: <code>/api/products/lookup/&lt;EAN&gt;</code> — siap untuk scanner.</div>
+      </div>
+    </div>
+  </div>
+  <h2>Stok per Gudang</h2>
+  <table><tr><th>Warehouse</th><th class="money">Physical</th><th class="money">Reserved</th>
+  <th class="money">Available</th><th class="money">Avg Cost</th><th class="money">Value</th></tr>
+  ${d.by_warehouse.map(r => `<tr><td>${r.wh_name}</td><td class="money">${r.physical}</td><td class="money">${r.reserved}</td>
+    <td class="money"><b class="${r.available<=0?'low':'ok'}">${r.available}</b></td>
+    <td class="money">${fmt(r.avg_cost)}</td><td class="money">${fmt(r.stock_value)}</td></tr>`).join('') || '<tr><td colspan=6 class=mut>belum ada stok</td></tr>'}</table>
+  <h2>Serial Numbers</h2>
+  <table><tr><th>Serial</th><th>Status</th><th>Warehouse</th><th>Warranty End</th></tr>
+  ${d.serials.slice(0,30).map(s => `<tr><td><b>${s.serial}</b></td><td>${badge(s.status)}</td><td>${s.wh_name||'—'}</td>
+    <td class="mut">${s.warranty_end||'—'}</td></tr>`).join('') || '<tr><td colspan=4 class=mut>no serials</td></tr>'}</table>
+  ${d.serials.length > 30 ? `<div class="mut" style="font-size:11px">… ${d.serials.length-30} more</div>` : ''}
+  <h2>Mutasi Terakhir</h2>
+  <table><tr><th>When</th><th>Type</th><th>Warehouse</th><th class="money">ΔQty</th><th>Ref</th></tr>
+  ${d.movements.map(m => `<tr><td class="mut">${m.moved_at}</td><td>${m.movement_type}</td><td>${m.wh_name}</td>
+    <td class="money ${m.qty_delta<0?'low':'ok'}">${m.qty_delta}</td><td class="mut">${m.ref_no||''}</td></tr>`).join('') || '<tr><td colspan=5 class=mut>belum ada mutasi</td></tr>'}</table>`;
+};
+window.saveEan = async id => {
+  try {
+    await api('/products/' + id, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ barcode: $('#ean-input').value.trim() || null }) });
+    toast('EAN tersimpan');
+    views.item(id);
+  } catch (e) { toast(e.message, true); }
+};
+window.upPhoto = async id => {
+  const inp = document.getElementById('photo-file');
+  if (!inp.files || !inp.files[0]) return;
+  try {
+    const r = await fetch('/api/products/' + id + '/photo', { method: 'POST', body: inp.files[0],
+      headers: { 'Content-Type': inp.files[0].type } });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || 'upload failed');
+    toast('Foto tersimpan');
+    views.item(id);
+  } catch (e) { toast(e.message, true); }
+};
+
+// ---------------- Stock Transfers (§21) ----------------
+views.transfer = async () => {
+  if (!PRODUCTS.length) {
+    PRODUCTS = await api('/products'); WAREHOUSES = await api('/warehouses');
+  }
+  const list = await api('/stock-transfers');
+  const wOpts = opt(WAREHOUSES, 'id', w => w.name);
+  main.innerHTML = `
+  <h1>Stock Transfer Antar Gudang</h1>
+  <div class="sub">§21 · TRANSFER_OUT di gudang asal, TRANSFER_IN di gudang tujuan · serial pindah otomatis</div>
+  <div class="formbox">
+    <div class="row">
+      <div style="flex:2"><label>Dari Gudang *</label><select id="trf-from">${wOpts}</select></div>
+      <div style="flex:2"><label>Ke Gudang *</label><select id="trf-to">${wOpts}</select></div>
+      <div style="flex:1.5"><label>Tanggal</label><input id="trf-date" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
+      <div style="flex:2"><label>Catatan</label><input id="trf-note" placeholder="opsional"></div>
+      <div style="align-self:flex-end"><button class="btn" onclick="mkTrf()">Buat TRF</button></div>
+    </div>
+    <table id="trf-lines"></table>
+    <button class="btn gray sm" onclick="addTrfLine()">+ Tambah baris</button>
+  </div>
+  <h2>Riwayat Transfer</h2>
+  <table><tr><th>Doc No</th><th>Tanggal</th><th>Dari</th><th>Ke</th><th>Status</th><th>Actions</th></tr>
+  ${list.map(t => `<tr><td><b>${t.doc_no}</b></td><td>${t.transfer_date}</td><td>${t.from_name}</td><td>${t.to_name}</td>
+    <td>${badge(t.status)}</td><td>${wfBtns('stock_transfers', t)}</td></tr>`).join('') || '<tr><td colspan=6 class=mut>belum ada transfer</td></tr>'}</table>`;
+  window.trfLines = [];
+  addTrfLine();
+};
+window.addTrfLine = () => {
+  const i = window.trfLines.length;
+  window.trfLines.push({ pid: PRODUCTS[0] ? PRODUCTS[0].id : null, qty: 1, serials: '' });
+  $('#trf-lines').insertAdjacentHTML('beforeend', `
+    <tr><td style="width:50%"><select onchange="trfLines[${i}].pid=+this.value">
+      ${PRODUCTS.map(p => `<option value="${p.id}">${p.code} — ${p.name}</option>`).join('')}</select></td>
+    <td><input type="number" min="1" value="1" oninput="trfLines[${i}].qty=+this.value"></td>
+    <td><input placeholder="serials (koma)" oninput="trfLines[${i}].serials=this.value"></td></tr>`);
+  if (i === 0) $('#trf-lines').insertAdjacentHTML('beforebegin',
+    '<tr><th style="width:50%">Product</th><th>Qty</th><th>Serial (opsional)</th></tr>');
+};
+window.mkTrf = async () => {
+  const from = +$('#trf-from').value, to = +$('#trf-to').value;
+  if (from === to) return toast('Gudang asal dan tujuan harus berbeda', true);
+  const payload = { from_warehouse_id: from, to_warehouse_id: to,
+    transfer_date: $('#trf-date').value || null, note: $('#trf-note').value || null,
+    lines: window.trfLines.filter(l => l.pid).map(l => ({ product_id: l.pid, qty: l.qty,
+      serials: l.serials ? l.serials.split(',').map(s => s.trim()).filter(Boolean) : [] })) };
+  if (!payload.lines.length) return toast('Minimal satu baris barang', true);
+  try {
+    const r = await api('/stock-transfers', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload) });
+    toast(`Created ${r.doc_no} — submit → approve → post untuk memindahkan stok`);
+    views.transfer();
+  } catch (e) { toast(e.message, true); }
+};
+
 // ---------------- router ----------------
 let current = 'dash';
 window.go = async v => {
   current = v;
   document.querySelectorAll('nav a').forEach(a => a.classList.toggle('on', a.dataset.v === v));
-  try { await views[v](); } catch (e) { main.innerHTML = `<h1>Error</h1><pre>${e.message}</pre>`; }
+  try {
+    const m = v.match(/^item-(\d+)$/);
+    if (m) return await views.item(Number(m[1]));
+    await views[v]();
+  } catch (e) { main.innerHTML = `<h1>Error</h1><pre>${e.message}</pre>`; }
 };
 // session header (user + logout) — injected above every view
 (async () => {

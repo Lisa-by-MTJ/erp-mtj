@@ -127,6 +127,50 @@ check('R8 Dashboard consistent (§47)', () => {
   assert.ok(s.active_warranty >= 1, 'warranty from R5 visible on dashboard');
 });
 
+check('R9 Stock Transfer (§21): post => source OUT, dest IN, serial moves, guards enforced', () => {
+  const wh2 = one(`SELECT * FROM warehouses WHERE id<>? LIMIT 1`, whMain.id);
+  const before = { src: totalsForProduct(pCab.id, whMain.id).physical,
+                   dst: totalsForProduct(pCab.id, wh2.id).physical };
+  const trf = Number(db.prepare(
+    `INSERT INTO stock_transfers(doc_no,transfer_date,from_warehouse_id,to_warehouse_id)
+     VALUES(?,?,?,?)`).run(`TRF-${yr}-90001`, dstr, whMain.id, wh2.id).lastInsertRowid);
+  db.prepare(`INSERT INTO stock_transfer_lines(stock_transfer_id,product_id,qty,serials) VALUES(?,?,?,?)`)
+    .run(trf, pCab.id, 3, '[]');
+  transition('stock_transfers', trf, 'submit', 1);
+  transition('stock_transfers', trf, 'approve', 1);
+  post('stock_transfers', trf, 1);
+  assert.strictEqual(totalsForProduct(pCab.id, whMain.id).physical, before.src - 3, 'source decremented');
+  assert.strictEqual(totalsForProduct(pCab.id, wh2.id).physical, before.dst + 3, 'destination incremented');
+  assert.strictEqual(totalsForProduct(pCab.id, whMain.id).physical + totalsForProduct(pCab.id, wh2.id).physical,
+    before.src + before.dst, 'no stock lost in transit');
+
+  // same-warehouse transfer rejected
+  let threw = false;
+  try {
+    const bad1 = Number(db.prepare(
+      `INSERT INTO stock_transfers(doc_no,transfer_date,from_warehouse_id,to_warehouse_id)
+       VALUES(?,?,?,?)`).run(`TRF-${yr}-90002`, dstr, whMain.id, whMain.id).lastInsertRowid);
+    db.prepare(`INSERT INTO stock_transfer_lines(stock_transfer_id,product_id,qty,serials) VALUES(?,?,?,?)`)
+      .run(bad1, pCab.id, 1, '[]');
+    transition('stock_transfers', bad1, 'submit', 1);
+  } catch (e) { threw = /must differ/.test(e.message); }
+  assert.ok(threw, 'same-warehouse rejected at submit');
+
+  // over-transfer rejected at post (negative stock guard)
+  threw = false;
+  try {
+    const bad2 = Number(db.prepare(
+      `INSERT INTO stock_transfers(doc_no,transfer_date,from_warehouse_id,to_warehouse_id)
+       VALUES(?,?,?,?)`).run(`TRF-${yr}-90003`, dstr, wh2.id, whMain.id).lastInsertRowid);
+    db.prepare(`INSERT INTO stock_transfer_lines(stock_transfer_id,product_id,qty,serials) VALUES(?,?,?,?)`)
+      .run(bad2, pCab.id, 10 ** 9, '[]');
+    transition('stock_transfers', bad2, 'submit', 1);
+    transition('stock_transfers', bad2, 'approve', 1);
+    post('stock_transfers', bad2, 1);
+  } catch (e) { threw = /NEGATIVE_STOCK_GUARD/.test(e.message); }
+  assert.ok(threw, 'over-transfer rejected');
+});
+
 for (const [st, name] of results) console.log(st.padEnd(5), name);
 const fails = results.filter(r => r[0] === 'FAIL').length;
 console.log(fails === 0 ? '\nALL TESTS GREEN — numbers consistent (§62)' : `\n${fails} FAILURES`);

@@ -1,6 +1,8 @@
 // MTJ Channel Manager — API router (Blueprint V2.0)
 'use strict';
-const { db, audit, totalsForProduct } = require('./db.js');
+const fs = require('node:fs');
+const path = require('node:path');
+const { db, audit, totalsForProduct, UPLOAD_DIR } = require('./db.js');
 const { transition } = require('./approval.js');
 const { post, computeTotals } = require('./posting.js');
 const dash = require('./dashboard.js');
@@ -82,12 +84,87 @@ route('GET', '/api/warehouses', (c) => ok(c.res, rows(`SELECT * FROM warehouses 
 
 // ================= STOCK / INVENTORY (§18-§21) =================
 route('GET', '/api/stock', (c) => ok(c.res, rows(`
-  SELECT ib.product_id, p.code, p.name, p.brand, w.code wh_code, w.name wh_name,
+  SELECT ib.product_id, p.code, p.name, p.brand, p.barcode, w.code wh_code, w.name wh_name,
          ib.physical, ib.reserved, (ib.physical - ib.reserved) available, ib.avg_cost,
          (ib.physical*ib.avg_cost) stock_value, p.reorder_point
   FROM inventory_balances ib JOIN products p ON p.id=ib.product_id JOIN warehouses w ON w.id=ib.warehouse_id
   ORDER BY p.code`)));
 route('GET', '/api/stock/:productId', (c) => ok(c.res, totalsForProduct(Number(c.params.productId))));
+
+// ---- Item detail (§18): master + per-warehouse balances + movements + serials ----
+route('GET', '/api/products/lookup/:ean', (c) => {
+  const p = one(`SELECT * FROM products WHERE barcode=? AND is_active=1`, c.params.ean);
+  if (!p) return bad(c.res, 404, `No product with EAN ${c.params.ean}`);
+  return ok(c.res, { ...p, stock: totalsForProduct(p.id) });
+});
+route('GET', '/api/products/:id/detail', (c) => {
+  const id = Number(c.params.id);
+  const product = one(`SELECT * FROM products WHERE id=?`, id);
+  if (!product) return bad(c.res, 404, 'Product not found');
+  return ok(c.res, {
+    product,
+    by_warehouse: rows(`SELECT ib.*, w.code wh_code, w.name wh_name,
+        (ib.physical-ib.reserved) available, (ib.physical*ib.avg_cost) stock_value
+      FROM inventory_balances ib JOIN warehouses w ON w.id=ib.warehouse_id
+      WHERE ib.product_id=? ORDER BY w.code`, id),
+    totals: totalsForProduct(id),
+    movements: rows(`SELECT m.*, w.name wh_name FROM stock_movements m
+      JOIN warehouses w ON w.id=m.warehouse_id WHERE m.product_id=? ORDER BY m.id DESC LIMIT 50`, id),
+    serials: rows(`SELECT sn.*, w.name wh_name FROM serial_numbers sn
+      LEFT JOIN warehouses w ON w.id=sn.current_warehouse_id WHERE sn.product_id=? ORDER BY sn.id DESC LIMIT 200`, id)
+  });
+});
+route('POST', '/api/products/:id', async (c) => {
+  const b = await readBody(c.req);
+  const id = Number(c.params.id);
+  const p = one(`SELECT * FROM products WHERE id=?`, id);
+  if (!p) return bad(c.res, 404, 'Product not found');
+  if (b.barcode !== undefined) {
+    if (b.barcode) {
+      const dup = one(`SELECT id FROM products WHERE barcode=? AND id<>?`, b.barcode, id);
+      if (dup) return bad(c.res, 409, 'EAN already used by another product');
+    }
+    run(`UPDATE products SET barcode=? WHERE id=?`, b.barcode || null, id);
+    audit(1, 'products', 'UPDATE', { entity: id, field: 'barcode', old: p.barcode, newv: b.barcode || null });
+  }
+  return ok(c.res, one(`SELECT * FROM products WHERE id=?`, id));
+});
+route('POST', '/api/products/:id/photo', (c) => new Promise(resolve => {
+  const id = Number(c.params.id);
+  if (!one(`SELECT id FROM products WHERE id=?`, id)) { bad(c.res, 404, 'Product not found'); return resolve(); }
+  const mime = String(c.req.headers['content-type'] || '').split(';')[0];
+  if (!/^image\/(png|jpeg|gif|webp)$/.test(mime)) { bad(c.res, 415, 'Only png/jpeg/gif/webp allowed'); return resolve(); }
+  const ext = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp' }[mime];
+  const chunks = []; let size = 0, dead = false;
+  c.req.on('data', ch => {
+    size += ch.length;
+    if (size > 5 * 1024 * 1024) { dead = true; c.req.destroy(); resolve(); return; }
+    chunks.push(ch);
+  });
+  c.req.on('end', () => {
+    if (dead) return;
+    try {
+      const dir = path.join(UPLOAD_DIR, 'products');
+      fs.mkdirSync(dir, { recursive: true });
+      const name = `p${id}-${Date.now()}.${ext}`;
+      fs.writeFileSync(path.join(dir, name), Buffer.concat(chunks));
+      const urlPath = `/uploads/products/${name}`;
+      run(`UPDATE products SET photo_url=? WHERE id=?`, urlPath, id);
+      audit(1, 'products', 'PHOTO_UPLOAD', { entity: id, newv: urlPath });
+      ok(c.res, { photo_url: urlPath });
+    } catch (e) { bad(c.res, 500, e.message); }
+    resolve();
+  });
+  c.req.on('error', () => { if (!dead) { bad(c.res, 500, 'upload failed'); resolve(); } });
+}));
+route('POST', '/api/warehouses', async (c) => {
+  const b = await readBody(c.req);
+  if (!b.code || !b.name) return bad(c.res, 400, 'code and name required');
+  const info = run(`INSERT INTO warehouses(code,name,type,address) VALUES(?,?,?,?)`,
+      b.code, b.name, b.type || 'MAIN', b.address || null);
+  audit(1, 'warehouses', 'CREATE', { entity: Number(info.lastInsertRowid), newv: b.name });
+  return ok(c.res, { id: Number(info.lastInsertRowid) });
+});
 route('GET', '/api/movements', (c) => ok(c.res, rows(`
   SELECT m.*, p.code pcode, p.name pname, w.name wh_name FROM stock_movements m
   JOIN products p ON p.id=m.product_id JOIN warehouses w ON w.id=m.warehouse_id
@@ -112,6 +189,31 @@ route('POST', '/api/reservations/:id/release', async (c) => {
   return ok(c.res, { released: true });
 });
 
+// ================= STOCK TRANSFERS (§21) =================
+route('GET', '/api/stock-transfers', (c) => ok(c.res, rows(`
+  SELECT t.*, wf.code from_code, wf.name from_name, wt.code to_code, wt.name to_name
+  FROM stock_transfers t
+  JOIN warehouses wf ON wf.id=t.from_warehouse_id
+  JOIN warehouses wt ON wt.id=t.to_warehouse_id ORDER BY t.id DESC`)));
+route('POST', '/api/stock-transfers', async (c) => {
+  const b = await readBody(c.req);
+  try {
+    if (!b.from_warehouse_id || !b.to_warehouse_id) return bad(c.res, 400, 'from_warehouse_id and to_warehouse_id required');
+    if (b.from_warehouse_id === b.to_warehouse_id) return bad(c.res, 422, 'Source and destination must differ');
+    const no = docNumber('TRF');
+    const info = run(`INSERT INTO stock_transfers(doc_no,transfer_date,from_warehouse_id,to_warehouse_id,note)
+      VALUES(?,COALESCE(?,date('now')),?,?,?)`,
+      no, b.transfer_date || null, b.from_warehouse_id, b.to_warehouse_id, b.note || null);
+    const id = Number(info.lastInsertRowid);
+    for (const l of (b.lines || [])) {
+      run(`INSERT INTO stock_transfer_lines(stock_transfer_id,product_id,qty,serials) VALUES(?,?,?,?)`,
+          id, l.product_id, l.qty, JSON.stringify(l.serials || []));
+    }
+    audit(1, 'stock_transfers', 'CREATE', { docNo: no, entity: id });
+    return ok(c.res, { id, doc_no: no });
+  } catch (e) { return bad(c.res, 422, e.message); }
+});
+
 // ================= DOCUMENT WORKFLOW =================
 const DOC_DEFS = {
   purchase_requests: { prefix: 'PR', lc: 'purchase_request_lines', fk: 'purchase_request_id' },
@@ -120,10 +222,14 @@ const DOC_DEFS = {
   quotations:        { prefix: 'QT', lc: 'quotation_lines', fk: 'quotation_id' },
   sales_orders:      { prefix: 'SO', lc: 'sales_order_lines', fk: 'sales_order_id' },
   delivery_orders:   { prefix: 'DO', lc: 'delivery_order_lines', fk: 'delivery_order_id' },
+  stock_transfers:   { prefix: 'TRF', lc: 'stock_transfer_lines', fk: 'stock_transfer_id' },
 };
 route('GET', '/api/docs/:table', (c) => {
   if (!DOC_DEFS[c.params.table]) return bad(c.res, 404, 'Unknown doc type');
-  const def = DOC_DEFS[c.params.table];
+  if (c.params.table === 'stock_transfers') return ok(c.res, rows(`
+    SELECT t.*, wf.name from_name, wt.name to_name, NULL partner_name FROM stock_transfers t
+    JOIN warehouses wf ON wf.id=t.from_warehouse_id JOIN warehouses wt ON wt.id=t.to_warehouse_id
+    ORDER BY t.id DESC`));
   return ok(c.res, rows(`SELECT d.*, bp.name partner_name FROM ${c.params.table} d
     LEFT JOIN business_partners bp ON bp.id=d.supplier_id OR bp.id=d.customer_id
     ORDER BY d.id DESC`));
