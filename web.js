@@ -20,8 +20,11 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript',
 // ---- stateless session tokens: <exp>.<hmac(secret, user+exp)> ----
 const SECRET = crypto.createHash('sha256').update('mtj-erp-session:' + USER + ':' + PASS).digest();
 const TTL_MS = 7 * 24 * 3600 * 1000;
-const sign = exp => crypto.createHmac('sha256', SECRET).update(USER + ':' + exp).digest('hex');
+const { db, verifyPassword } = require('./db.js');
 const newToken = () => { const exp = Date.now() + TTL_MS; return exp + '.' + sign(exp); };
+// username-bound token: <exp>.<hmac(secret, username+exp)> — sign() now takes the user
+const signFor = (user, exp) => crypto.createHmac('sha256', SECRET).update(user + ':' + exp).digest('hex');
+const newTokenFor = user => { const exp = Date.now() + TTL_MS; return exp + '.' + signFor(user, exp); };
 function validToken(tok) {
   if (!tok) return false;
   const dot = tok.lastIndexOf('.');
@@ -31,6 +34,25 @@ function validToken(tok) {
   if (sig.length !== want.length) return false;
   if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(want))) return false;
   return Number(exp) > Date.now();
+}
+// ---- who is logged in? session cookie user OR Basic (env admin) ----
+// Token carries the username prefix; HMAC binds it, so it cannot be forged.
+function decodeToken(tok) {
+  if (!validToken(tok)) return null;
+  return tok.slice(0, tok.lastIndexOf('.'));
+}
+function sessionUser(req) {
+  const tok = getCookie(req, COOKIE);
+  const u = decodeToken(tok);
+  if (u) {
+    const row = db.prepare(`SELECT * FROM users WHERE username=? AND is_active=1`).get(u);
+    if (row) return row;
+    if (u === USER) return { id: 1, username: USER, full_name: 'Administrator', role: 'ADMIN', is_active: 1 };
+    return null;
+  }
+  if ((req.headers.authorization || '') === EXPECTED)
+    return { id: 1, username: USER, full_name: 'Administrator', role: 'ADMIN', is_active: 1 };
+  return null;
 }
 const COOKIE = 'mtj_session';
 function getCookie(req, name) {
@@ -80,9 +102,18 @@ function start(port) {
         req.on('data', c => { body += c; if (body.length > 4096) req.destroy(); });
         return req.on('end', () => {
           const q = new URLSearchParams(body);
-          if (credsOK(q.get('username'), q.get('password'))) {
+          const u = String(q.get('username') || ''), pw = String(q.get('password') || '');
+          // 1) DB users (scrypt-hashed, role-backed)
+          const row = db.prepare(`SELECT * FROM users WHERE username=? AND is_active=1`).get(u);
+          if (row && verifyPassword(pw, row.password_hash)) {
             return send(res, 302, '', 'text/plain', {
-              'Set-Cookie': `${COOKIE}=${newToken()}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${TTL_MS / 1000}`,
+              'Set-Cookie': `${COOKIE}=${newTokenFor(u)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${TTL_MS / 1000}`,
+              'Location': '/' });
+          }
+          // 2) legacy env admin fallback (kept so --env-file credentials always work)
+          if (credsOK(u, pw)) {
+            return send(res, 302, '', 'text/plain', {
+              'Set-Cookie': `${COOKIE}=${newTokenFor(u)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${TTL_MS / 1000}`,
               'Location': '/' });
           }
           return send(res, 302, '', 'text/plain', { 'Location': '/login?e=1' });

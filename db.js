@@ -227,6 +227,31 @@ CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT);
 
 const PPN_RATE = 0.11; // §9
 
+// ---------------- §User Access: password hashing (scrypt) ----------------
+function hashPassword(pw) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync(String(pw), salt, 64).toString('hex');
+  return `${salt}:${hash}`;
+}
+function verifyPassword(pw, stored) {
+  if (!stored || !stored.includes(':')) return false;
+  const [salt, hash] = stored.split(':');
+  const cand = crypto.scryptSync(String(pw), salt, 64);
+  const want = Buffer.from(hash, 'hex');
+  return cand.length === want.length && crypto.timingSafeEqual(cand, want);
+}
+// Bootstrap: if the users table is empty, seed the env admin as role ADMIN so
+// the owner can never be locked out of user management.
+(function ensureBootstrapAdmin() {
+  const n = db.prepare(`SELECT COUNT(*) n FROM users`).get().n;
+  if (n === 0 && process.env.MTJ_USER && process.env.MTJ_PASS) {
+    db.prepare(`INSERT INTO users(username,full_name,role,password_hash,is_active)
+                VALUES(?,?, 'ADMIN', ?, 1)`)
+      .run(process.env.MTJ_USER, 'Administrator (bootstrap)', hashPassword(process.env.MTJ_PASS));
+    console.log('[MTJ-ERP] bootstrapped admin user from MTJ_USER env');
+  }
+})();
+
 // ---------------- §48 Document Numbering Engine ----------------
 function nextDocNo(prefix) {
   const yr = new Date().getFullYear();
@@ -359,4 +384,4 @@ function snTrail(serialId) { // full traceability §56
 
 module.exports = { db, DB_PATH, UPLOAD_DIR, PPN_RATE, nextDocNo, audit, getBalance, totalsForProduct,
                    moveStock, createReservation, releaseReservation, registerSerialsAtReceiving,
-                   snTrail, runExclusive };
+                   snTrail, runExclusive, hashPassword, verifyPassword };
