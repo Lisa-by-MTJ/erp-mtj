@@ -338,6 +338,89 @@ views.warranty = async () => {
   ${wos.map(w => `<tr><td><b>${w.doc_no}</b></td><td>${w.project_code||''}</td><td>${w.location||''}</td>
    <td>${w.scheduled_date||''}</td><td>${badge(w.status)}</td></tr>`).join('')}</table>`;
 };
+views.users = async () => {
+  const me = await api('/session');
+  if (!['ADMIN'].includes(me.role)) { main.innerHTML = '<h1>403</h1><div class="sub">Admin only.</div>'; return; }
+  const list = await api('/users');
+  const roleOpts = sel => ['ADMIN','MANAGER','STAFF','VIEWER']
+    .map(r => `<option ${r === sel ? 'selected' : ''}>${r}</option>`).join('');
+  main.innerHTML = `
+  <h1>Users &amp; Access</h1>
+  <div class="sub">ADMIN: full control incl. user management · MANAGER: operate + approve/post ·
+   STAFF: create/read · VIEWER: read-only</div>
+  <div class="formbox"><b>Tambah User</b>
+    <form onsubmit="return addUser(event)">
+      <div class="row">
+        <div style="flex:1"><label>Username *</label><input name="username" required></div>
+        <div style="flex:2"><label>Nama Lengkap *</label><input name="full_name" required></div>
+        <div style="flex:1"><label>Role</label><select name="role">${roleOpts('STAFF')}</select></div>
+        <div style="flex:1"><label>Password *</label><input name="password" type="password" required minlength="6"></div>
+        <div style="display:flex;align-items:flex-end"><button class="btn" type="submit">Tambah</button></div>
+      </div>
+    </form>
+  </div>
+  <table><tr><th>ID</th><th>Username</th><th>Nama</th><th>Role</th><th>Status</th><th>Actions</th></tr>
+  ${list.map(u => `<tr><td>${u.id}</td><td><b>${u.username}</b>${u.username === me.user ? ' <span class="mut">(you)</span>' : ''}</td>
+    <td>${u.full_name}</td>
+    <td><select ${u.username === me.user ? 'disabled' : ''} onchange="editUser(${u.id}, {role:this.value})">${roleOpts(u.role)}</select></td>
+    <td>${u.is_active ? badge('ACTIVE') : badge('INACTIVE')}</td>
+    <td>
+      <button class="btn sm gray" onclick="resetPw(${u.id}, '${u.username}')">Reset PW</button>
+      ${u.username === me.user ? '' : (u.is_active
+        ? `<button class="btn sm warn" onclick="editUser(${u.id}, {is_active:false})">Disable</button>`
+        : `<button class="btn sm" onclick="editUser(${u.id}, {is_active:true})">Enable</button>`)}
+      ${u.username === me.user ? '' : `<button class="btn sm warn" onclick="delUser(${u.id}, '${u.username}')">Delete</button>`}
+    </td></tr>`).join('')}</table>
+  <h2>Ganti Password Saya</h2>
+  <div class="formbox"><form onsubmit="return changeMyPw(event)">
+    <div class="row">
+      <div style="flex:1"><label>Password Lama</label><input name="old_password" type="password" required></div>
+      <div style="flex:1"><label>Password Baru (min 6)</label><input name="new_password" type="password" required minlength="6"></div>
+      <div style="display:flex;align-items:flex-end"><button class="btn" type="submit">Ganti</button></div>
+    </div>
+  </form></div>`;
+};
+window.addUser = async ev => {
+  ev.preventDefault();
+  const b = Object.fromEntries(new FormData(ev.target).entries());
+  try {
+    const r = await api('/users', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(b) });
+    toast(`User ${r.username} dibuat (role ${r.role})`); views.users();
+  } catch (e) { toast(e.message, true); }
+  return false;
+};
+window.editUser = async (id, patch) => {
+  try {
+    await api('/users/' + id, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch) });
+    toast('User diperbarui'); views.users();
+  } catch (e) { toast(e.message, true); views.users(); }
+};
+window.resetPw = async (id, username) => {
+  const pw = prompt(`Password baru untuk ${username} (min 6 karakter):`);
+  if (!pw) return;
+  if (pw.length < 6) return toast('Minimal 6 karakter', true);
+  editUser(id, { password: pw });
+};
+window.delUser = async (id, username) => {
+  if (!confirm(`Hapus user ${username}? Tindakan ini tercatat di audit trail.`)) return;
+  try {
+    await api(`/users/${id}/delete`, { method: 'POST' });
+    toast(`User ${username} dihapus`); views.users();
+  } catch (e) { toast(e.message, true); }
+};
+window.changeMyPw = async ev => {
+  ev.preventDefault();
+  const b = Object.fromEntries(new FormData(ev.target).entries());
+  try {
+    await api('/me/password', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(b) });
+    toast('Password diganti'); ev.target.reset();
+  } catch (e) { toast(e.message, true); }
+  return false;
+};
+
 views.audit = async () => {
   const rowsL = await api('/audit');
   main.innerHTML = `<h1>Audit Trail (§12)</h1>
@@ -482,14 +565,18 @@ window.go = async v => {
     await views[v]();
   } catch (e) { main.innerHTML = `<h1>Error</h1><pre>${e.message}</pre>`; }
 };
-// session header (user + logout) — injected above every view
+// session header (user + role + logout) — injected above every view
 (async () => {
   try {
     const s = await api('/session');
     const h = document.createElement('div');
     h.id = 'whoami';
-    h.innerHTML = `Signed in as <b>${s.user}</b><button id="logout" onclick="location.href='/logout'">Log out</button>`;
+    h.innerHTML = `Signed in as <b>${s.user}</b> <span class="mut">· ${s.role}</span><button id="logout" onclick="location.href='/logout'">Log out</button>`;
     main.before(h);
+    if (s.role === 'ADMIN') {
+      const usersLink = document.querySelector('nav a[data-v="users"]');
+      if (usersLink) usersLink.style.display = '';
+    }
   } catch (e) { /* not logged in — /login will handle */ }
 })();
 document.querySelectorAll('nav a').forEach(a => a.onclick = () => go(a.dataset.v));
