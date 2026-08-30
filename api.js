@@ -155,6 +155,7 @@ route('GET', '/api/products', (c) => ok(c.res,
   rows(`SELECT * FROM products WHERE is_active=1 ORDER BY code`)));
 route('GET', '/api/products/:id', (c) => ok(c.res, one(`SELECT * FROM products WHERE id=?`, c.params.id)));
 route('POST', '/api/products', async (c) => {
+  if (!requirePerm(c, 'create')) return;
   const b = await readBody(c.req);
   if (!b.code || !b.name) return bad(c.res, 400, 'code and name required');
   const dup = one(`SELECT id FROM products WHERE code=?`, b.code);
@@ -171,6 +172,7 @@ route('POST', '/api/products', async (c) => {
 route('GET', '/api/partners', (c) => ok(c.res,
   rows(`SELECT * FROM business_partners WHERE is_active=1 ORDER BY kind,name`)));
 route('POST', '/api/partners', async (c) => {
+  if (!requirePerm(c, 'create')) return;
   const b = await readBody(c.req);
   if (!b.kind || !b.name) return bad(c.res, 400, 'kind and name required');
   const info = run(`INSERT INTO business_partners(kind,code,name,customer_type,pic,phone,email,npwp,pkp_status,payment_term_days,address,city)
@@ -220,6 +222,7 @@ route('GET', '/api/products/:id/detail', (c) => {
   });
 });
 route('POST', '/api/products/:id', async (c) => {
+  if (!requirePerm(c, 'create')) return;
   const b = await readBody(c.req);
   const id = Number(c.params.id);
   const p = one(`SELECT * FROM products WHERE id=?`, id);
@@ -263,6 +266,7 @@ route('POST', '/api/products/:id/photo', (c) => new Promise(resolve => {
   c.req.on('error', () => { if (!dead) { bad(c.res, 500, 'upload failed'); resolve(); } });
 }));
 route('POST', '/api/warehouses', async (c) => {
+  if (!requirePerm(c, 'create')) return;
   const b = await readBody(c.req);
   if (!b.code || !b.name) return bad(c.res, 400, 'code and name required');
   const info = run(`INSERT INTO warehouses(code,name,type,address) VALUES(?,?,?,?)`,
@@ -280,6 +284,7 @@ route('GET', '/api/reservations', (c) => ok(c.res, rows(`
   LEFT JOIN projects p ON p.id=r.project_id LEFT JOIN sales_orders s ON s.id=r.sales_order_id
   ORDER BY r.id DESC`)));
 route('POST', '/api/reservations', async (c) => {
+  if (!requirePerm(c, 'create')) return;
   const b = await readBody(c.req);
   try {
     const { createReservation } = require('./db.js');
@@ -289,6 +294,7 @@ route('POST', '/api/reservations', async (c) => {
   } catch (e) { return bad(c.res, 422, e.message); }
 });
 route('POST', '/api/reservations/:id/release', async (c) => {
+  if (!requirePerm(c, 'workflow')) return;
   const { releaseReservation } = require('./db.js');
   releaseReservation(Number(c.params.id), 1);
   return ok(c.res, { released: true });
@@ -301,6 +307,7 @@ route('GET', '/api/stock-transfers', (c) => ok(c.res, rows(`
   JOIN warehouses wf ON wf.id=t.from_warehouse_id
   JOIN warehouses wt ON wt.id=t.to_warehouse_id ORDER BY t.id DESC`)));
 route('POST', '/api/stock-transfers', async (c) => {
+  if (!requirePerm(c, 'create')) return;
   const b = await readBody(c.req);
   try {
     if (!b.from_warehouse_id || !b.to_warehouse_id) return bad(c.res, 400, 'from_warehouse_id and to_warehouse_id required');
@@ -340,6 +347,7 @@ route('GET', '/api/docs/:table', (c) => {
     ORDER BY d.id DESC`));
 });
 route('POST', '/api/purchase-orders', async (c) => {
+  if (!requirePerm(c, 'create')) return;
   const b = await readBody(c.req);
   try {
     const no = docNumber('PO');
@@ -363,6 +371,7 @@ route('POST', '/api/purchase-orders', async (c) => {
   } catch (e) { return bad(c.res, 422, e.message); }
 });
 route('POST', '/api/receivings', async (c) => {
+  if (!requirePerm(c, 'create')) return;
   const b = await readBody(c.req);
   try {
     const no = docNumber('GRN');
@@ -380,6 +389,7 @@ route('POST', '/api/receivings', async (c) => {
   } catch (e) { return bad(c.res, 422, e.message); }
 });
 route('POST', '/api/quotations', async (c) => {
+  if (!requirePerm(c, 'create')) return;
   const b = await readBody(c.req);
   try {
     const no = docNumber('QT');
@@ -395,6 +405,7 @@ route('POST', '/api/quotations', async (c) => {
   } catch (e) { return bad(c.res, 422, e.message); }
 });
 route('POST', '/api/sales-orders', async (c) => {
+  if (!requirePerm(c, 'create')) return;
   const b = await readBody(c.req);
   try {
     const no = docNumber('SO');
