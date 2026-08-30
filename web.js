@@ -21,25 +21,22 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript',
 const SECRET = crypto.createHash('sha256').update('mtj-erp-session:' + USER + ':' + PASS).digest();
 const TTL_MS = 7 * 24 * 3600 * 1000;
 const { db, verifyPassword } = require('./db.js');
-const newToken = () => { const exp = Date.now() + TTL_MS; return exp + '.' + sign(exp); };
-// username-bound token: <exp>.<hmac(secret, username+exp)> — sign() now takes the user
+// username-bound token: <username>.<exp>.<hmac(secret, username+exp)>
 const signFor = (user, exp) => crypto.createHmac('sha256', SECRET).update(user + ':' + exp).digest('hex');
-const newTokenFor = user => { const exp = Date.now() + TTL_MS; return exp + '.' + signFor(user, exp); };
+const newTokenFor = user => { const exp = Date.now() + TTL_MS; return `${user}.${exp}.${signFor(user, exp)}`; };
 function validToken(tok) {
-  if (!tok) return false;
-  const dot = tok.lastIndexOf('.');
-  if (dot < 1) return false;
-  const exp = tok.slice(0, dot), sig = tok.slice(dot + 1);
-  const want = sign(exp);
-  if (sig.length !== want.length) return false;
-  if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(want))) return false;
-  return Number(exp) > Date.now();
+  return decodeToken(tok) !== null;
 }
 // ---- who is logged in? session cookie user OR Basic (env admin) ----
-// Token carries the username prefix; HMAC binds it, so it cannot be forged.
 function decodeToken(tok) {
-  if (!validToken(tok)) return null;
-  return tok.slice(0, tok.lastIndexOf('.'));
+  if (!tok) return null;
+  const i1 = tok.lastIndexOf('.'), i2 = i1 > 0 ? tok.lastIndexOf('.', i1 - 1) : -1;
+  if (i1 < 1 || i2 < 0) return null;
+  const user = tok.slice(0, i2), exp = tok.slice(i2 + 1, i1), sig = tok.slice(i1 + 1);
+  const want = signFor(user, exp);
+  if (sig.length !== want.length) return null;
+  if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(want))) return null;
+  return Number(exp) > Date.now() ? user : null;
 }
 function sessionUser(req) {
   const tok = getCookie(req, COOKIE);
@@ -126,16 +123,15 @@ function start(port) {
       }
 
       // ---- auth gate: session cookie OR HTTP Basic (for scripts/curl) ----
-      const sess = getCookie(req, COOKIE);
-      const basic = req.headers.authorization || '';
-      if (!validToken(sess) && basic !== EXPECTED) {
+      const user = sessionUser(req);
+      if (!user) {
         if (p.startsWith('/api/')) return send(res, 401, JSON.stringify({ error: 'Unauthorized' }));
         return send(res, 302, '', 'text/plain', { 'Location': '/login' });
       }
+      if (p === '/api/session') return send(res, 200, JSON.stringify(
+        { user: user.username, full_name: user.full_name, role: user.role, id: user.id }));
 
-      if (p === '/api/session') return send(res, 200, JSON.stringify({ user: USER }));
-
-      if (p.startsWith('/api/')) return api.handle(req, res, url);
+      if (p.startsWith('/api/')) return api.handle(req, res, url, user);
       if (p.startsWith('/uploads/')) { // product photos etc., stored under data/uploads
         const rel = p.replace(/^\/uploads\//, '').replace(/\.\./g, '');
         const full = path.join(process.env.MTJ_DATA_DIR || path.join(__dirname, 'data'), 'uploads', rel);
