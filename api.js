@@ -425,6 +425,7 @@ route('POST', '/api/sales-orders', async (c) => {
 route('POST', '/api/docs/:table/:id/:action', async (c) => {
   const t = c.params.table, id = Number(c.params.id), action = c.params.action;
   if (!DOC_DEFS[t]) return bad(c.res, 404, 'Unknown doc type');
+  if (!requirePerm(c, 'workflow')) return;
   try {
     if (['submit','approve','reject'].includes(action)) {
       const d = transition(t, id, action, 1);
@@ -441,6 +442,7 @@ route('GET', '/api/delivery-orders', (c) => ok(c.res, rows(`
   LEFT JOIN sales_orders s ON s.id=d.sales_order_id
   LEFT JOIN projects p ON p.id=d.project_id ORDER BY d.id DESC`)));
 route('POST', '/api/delivery-orders', async (c) => {
+  if (!requirePerm(c, 'create')) return;
   const b = await readBody(c.req);
   try {
     const no = docNumber('DO');
@@ -459,6 +461,7 @@ route('POST', '/api/delivery-orders', async (c) => {
   } catch (e) { return bad(c.res, 422, e.message); }
 });
 route('POST', '/api/delivery-orders/:id/close-signed', async (c) => {
+  if (!requirePerm(c, 'workflow')) return;
   const b = await readBody(c.req);
   run(`UPDATE delivery_orders SET signed_copy_url=?, closed_at=datetime('now'), status='LOCKED' WHERE id=? AND status='POSTED'`,
       b.signed_copy_url || 'uploaded', Number(c.params.id));
@@ -488,6 +491,7 @@ route('GET', '/api/projects/:id', (c) => {
   });
 });
 route('POST', '/api/projects', async (c) => {
+  if (!requirePerm(c, 'create')) return;
   const b = await readBody(c.req);
   try {
     const code = b.project_code || ('PRJ' + String(one(`SELECT COUNT(*) n FROM projects`).n + 1).padStart(3,'0'));
@@ -508,12 +512,14 @@ route('POST', '/api/projects', async (c) => {
   } catch (e) { return bad(c.res, 422, e.message); }
 });
 route('POST', '/api/projects/:id/billings/:bid/pay', async (c) => {
+  if (!requirePerm(c, 'workflow')) return;
   run(`UPDATE project_billings SET status='PAID', paid_amount=amount, paid_at=date('now') WHERE id=? AND project_id=?`,
       Number(c.params.bid), Number(c.params.id));
   audit(1, 'projects', 'BILLING_PAID', { entity: Number(c.params.id) });
   return ok(c.res, one(`SELECT * FROM project_billings WHERE id=?`, Number(c.params.bid)));
 });
 route('POST', '/api/projects/:id/costs', async (c) => {
+  if (!requirePerm(c, 'create')) return;
   const b = await readBody(c.req);
   run(`INSERT INTO project_costs(project_id,category,description,amount,ref_no) VALUES(?,?,?,?,?)`,
       Number(c.params.id), b.category || 'OTHER', b.description || null, b.amount || 0, b.ref_no || null);
@@ -526,6 +532,7 @@ route('GET', '/api/warranties', (c) => ok(c.res, rows(`
   JOIN products p ON p.id=w.product_id JOIN business_partners bp ON bp.id=w.customer_id
   LEFT JOIN serial_numbers sn ON sn.id=w.serial_id ORDER BY w.id DESC`)));
 route('POST', '/api/warranty-claims', async (c) => {
+  if (!requirePerm(c, 'create')) return;
   const b = await readBody(c.req);
   try {
     const no = docNumber('WCL');
@@ -537,6 +544,7 @@ route('POST', '/api/warranty-claims', async (c) => {
   } catch (e) { return bad(c.res, 422, e.message); }
 });
 route('POST', '/api/warranty-claims/:id/resolve', async (c) => {
+  if (!requirePerm(c, 'workflow')) return;
   const b = await readBody(c.req);
   run(`UPDATE warranty_claims SET status='RESOLVED', diagnosis=?, resolution=?, repair_cost=?, supplier_claim_ref=? WHERE id=?`,
       b.diagnosis || null, b.resolution || null, b.repair_cost || 0, b.supplier_claim_ref || null, Number(c.params.id));
@@ -548,6 +556,7 @@ route('GET', '/api/service-orders', (c) => ok(c.res, rows(`
   FROM service_orders s JOIN products p ON p.id=s.product_id JOIN business_partners bp ON bp.id=s.customer_id
   ORDER BY s.id DESC`)));
 route('POST', '/api/service-orders', async (c) => {
+  if (!requirePerm(c, 'create')) return;
   const b = await readBody(c.req);
   try {
     const no = docNumber('SRV');
@@ -565,6 +574,7 @@ route('POST', '/api/service-orders', async (c) => {
 route('GET', '/api/work-orders', (c) => ok(c.res, rows(`
   SELECT w.*, p.project_code FROM work_orders w LEFT JOIN projects p ON p.id=w.project_id ORDER BY w.id DESC`)));
 route('POST', '/api/work-orders', async (c) => {
+  if (!requirePerm(c, 'create')) return;
   const b = await readBody(c.req);
   try {
     const no = docNumber('WO');
@@ -578,6 +588,7 @@ route('POST', '/api/work-orders', async (c) => {
   } catch (e) { return bad(c.res, 422, e.message); }
 });
 route('POST', '/api/work-orders/:id/complete', async (c) => {
+  if (!requirePerm(c, 'workflow')) return;
   const b = await readBody(c.req);
   run(`UPDATE work_orders SET status='POSTED', checkin_at=COALESCE(checkin_at,datetime('now')),
        checkout_at=datetime('now'), solutions=?, rating=? WHERE id=?`,
@@ -596,7 +607,7 @@ route('GET', '/api/profitability', (c) => {
 });
 
 // ---------- dispatcher ----------
-async function handle(req, res, url) {
+async function handle(req, res, url, user) {
   const pathParts = url.pathname.split('/').filter(Boolean).slice(1); // strip 'api'
   for (const r of ROUTES) {
     if (r.method !== req.method) continue;
@@ -607,7 +618,7 @@ async function handle(req, res, url) {
       if (seg.startsWith(':')) params[seg.slice(1)] = decodeURIComponent(pathParts[i]);
       else if (seg !== pathParts[i]) hit = false;
     });
-    if (hit) { try { await r.fn({ req, res, params, url }); } catch (e) { bad(res, 500, e.message); } return; }
+    if (hit) { try { await r.fn({ req, res, params, url, user }); } catch (e) { bad(res, 500, e.message); } return; }
   }
   bad(res, 404, `No route ${req.method} ${url.pathname}`);
 }
