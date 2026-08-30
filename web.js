@@ -62,6 +62,16 @@ function start(port) {
       const p = url.pathname;
 
       // ---- public routes (no session) ----
+      // favicon + logo are public so they render on the login page and in
+      // browser tabs before auth (browsers fetch /favicon.png pre-login).
+      if (p === '/favicon.png') {
+        return send(res, 200, fs.readFileSync(path.join(UI_DIR, 'favicon.png')), 'image/png',
+          { 'Cache-Control': 'public, max-age=86400' });
+      }
+      if (p === '/logo.png') {
+        return send(res, 200, fs.readFileSync(path.join(UI_DIR, 'logo.png')), 'image/png',
+          { 'Cache-Control': 'public, max-age=86400' });
+      }
       if (p === '/login' && req.method === 'GET') {
         return send(res, 200, fs.readFileSync(path.join(UI_DIR, 'login.html')), 'text/html; charset=utf-8');
       }
