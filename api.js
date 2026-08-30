@@ -13,6 +13,28 @@ const rows = (sql, ...p) => db.prepare(sql).all(...p);
 const one = (sql, ...p) => db.prepare(sql).get(...p);
 const run = (sql, ...p) => db.prepare(sql).run(...p);
 
+// ================= §User Access & Roles =================
+// ADMIN: everything, incl. user management · MANAGER: operate + approve/post ·
+// STAFF: day-to-day create/read · VIEWER: read-only
+const ROLES = ['ADMIN', 'MANAGER', 'STAFF', 'VIEWER'];
+const PERMS = {
+  ADMIN:   { view: 1, create: 1, workflow: 1, admin: 1 },
+  MANAGER: { view: 1, create: 1, workflow: 1, admin: 0 },
+  STAFF:   { view: 1, create: 1, workflow: 0, admin: 0 },
+  VIEWER:  { view: 1, create: 0, workflow: 0, admin: 0 },
+};
+function permOf(c) {
+  const role = (c.user && c.user.role) || 'ADMIN'; // unauthenticated context (scripts) = admin
+  return PERMS[ROLES.includes(role) ? role : 'VIEWER'] || PERMS.VIEWER;
+}
+function requirePerm(c, key) {
+  if (!permOf(c)[key]) {
+    bad(c.res, 403, `Forbidden: your role (${(c.user && c.user.role) || '?'}) lacks '${key}' permission`);
+    return false;
+  }
+  return true;
+}
+
 function readBody(req) {
   return new Promise((resolve) => {
     let b = '';
@@ -44,6 +66,89 @@ function insertLines(lcTable, fkCol, id, lines) {
 // ---------- route table ----------
 const ROUTES = [];
 function route(method, pattern, fn) { ROUTES.push({ method, pattern, fn }); }
+
+// ================= USER ACCESS ADMIN (ADMIN only) =================
+route('GET', '/api/users', (c) => {
+  if (!requirePerm(c, 'admin')) return;
+  return ok(c.res, rows(`SELECT id, username, full_name, role, is_active,
+    '••••••' AS password_masked FROM users ORDER BY id`));
+});
+route('POST', '/api/users', async (c) => {
+  if (!requirePerm(c, 'admin')) return;
+  const b = await readBody(c.req);
+  const username = String(b.username || '').trim();
+  if (!username || !b.full_name || !b.password)
+    return bad(c.res, 400, 'username, full_name and password required');
+  if (!ROLES.includes(b.role)) return bad(c.res, 400, `role must be one of ${ROLES.join(', ')}`);
+  if (one(`SELECT id FROM users WHERE username=?`, username))
+    return bad(c.res, 409, 'Duplicate username');
+  const { hashPassword } = require('./db.js');
+  const info = run(`INSERT INTO users(username,full_name,role,password_hash,is_active) VALUES(?,?,?,?,1)`,
+      username, String(b.full_name).trim(), b.role, hashPassword(b.password));
+  audit((c.user && c.user.id) || 1, 'users', 'CREATE',
+    { entity: Number(info.lastInsertRowid), newv: `${username} (${b.role})` });
+  return ok(c.res, { id: Number(info.lastInsertRowid), username, role: b.role });
+});
+route('POST', '/api/users/:id', async (c) => {
+  if (!requirePerm(c, 'admin')) return;
+  const id = Number(c.params.id);
+  const u = one(`SELECT * FROM users WHERE id=?`, id);
+  if (!u) return bad(c.res, 404, 'User not found');
+  const b = await readBody(c.req);
+  const me = c.user || {};
+  const changes = [];
+  if (b.full_name !== undefined && b.full_name !== u.full_name) changes.push(['full_name', String(b.full_name).trim()]);
+  if (b.role !== undefined) {
+    if (!ROLES.includes(b.role)) return bad(c.res, 400, `role must be one of ${ROLES.join(', ')}`);
+    if (u.username === me.username && b.role !== 'ADMIN')
+      return bad(c.res, 422, 'You cannot demote your own ADMIN role');
+    changes.push(['role', b.role]);
+  }
+  if (b.is_active !== undefined) {
+    const act = b.is_active ? 1 : 0;
+    if (u.username === me.username && !act)
+      return bad(c.res, 422, 'You cannot deactivate your own account');
+    changes.push(['is_active', act]);
+  }
+  let pwChanged = false;
+  if (b.password) {
+    const { hashPassword } = require('./db.js');
+    run(`UPDATE users SET password_hash=? WHERE id=?`, hashPassword(b.password), id);
+    pwChanged = true;
+  }
+  for (const [f, v] of changes)
+    run(`UPDATE users SET ${f}=? WHERE id=?`, v, id);
+  audit((me.id) || 1, 'users', 'UPDATE', { entity: id,
+    newv: changes.map(([f, v]) => `${f}=${v}`).join(', ') + (pwChanged ? ', password=***' : '') });
+  return ok(c.res, one(`SELECT id, username, full_name, role, is_active FROM users WHERE id=?`, id));
+});
+route('POST', '/api/users/:id/delete', async (c) => {
+  if (!requirePerm(c, 'admin')) return;
+  const id = Number(c.params.id);
+  const u = one(`SELECT * FROM users WHERE id=?`, id);
+  if (!u) return bad(c.res, 404, 'User not found');
+  const me = c.user || {};
+  if (u.username === me.username) return bad(c.res, 422, 'You cannot delete your own account');
+  const admins = one(`SELECT COUNT(*) n FROM users WHERE role='ADMIN' AND is_active=1 AND id<>?`, id).n;
+  if (u.role === 'ADMIN' && admins === 0)
+    return bad(c.res, 422, 'Cannot delete the last active ADMIN');
+  run(`DELETE FROM users WHERE id=?`, id);
+  audit(me.id || 1, 'users', 'DELETE', { entity: id, old: `${u.username} (${u.role})` });
+  return ok(c.res, { deleted: id });
+});
+route('POST', '/api/me/password', async (c) => {
+  const b = await readBody(c.req);
+  if (!b.old_password || !b.new_password) return bad(c.res, 400, 'old_password and new_password required');
+  const { verifyPassword, hashPassword } = require('./db.js');
+  const me = c.user || {};
+  const u = one(`SELECT * FROM users WHERE username=? AND is_active=1`, me.username || '');
+  if (!u) return bad(c.res, 403, 'Session user not found in user database — sign in again');
+  if (!verifyPassword(b.old_password, u.password_hash))
+    return bad(c.res, 403, 'Old password incorrect');
+  run(`UPDATE users SET password_hash=? WHERE id=?`, hashPassword(b.new_password), u.id);
+  audit(u.id, 'users', 'PASSWORD_CHANGE', { entity: u.id });
+  return ok(c.res, { changed: true });
+});
 
 // ================= MASTER DATA (§4-§10) =================
 route('GET', '/api/products', (c) => ok(c.res,
