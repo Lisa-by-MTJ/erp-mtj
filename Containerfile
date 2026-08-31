@@ -9,7 +9,7 @@ ENV NODE_ENV=production
 WORKDIR /app
 
 # dependency-free: only copy what the runtime needs
-COPY package.json server.js db.js approval.js posting.js dashboard.js api.js web.js ./
+COPY package.json server.js db.js approval.js posting.js dashboard.js dashboard_ext.js api.js web.js ./
 COPY ui ./ui
 
 # data dir is expected as a volume so the SQLite DB survives container replacement

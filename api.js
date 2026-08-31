@@ -599,6 +599,31 @@ route('POST', '/api/work-orders/:id/complete', async (c) => {
 // ================= AUDIT / DASHBOARD =================
 route('GET', '/api/audit', (c) => ok(c.res, rows(`SELECT * FROM audit_trail ORDER BY id DESC LIMIT 200`)));
 route('GET', '/api/dashboard', (c) => ok(c.res, dash.snapshot()));
+
+// ---- Dashboard v2: snapshot + widgets (P0-P2), 30s cache to spare the ~20 sequential queries ----
+const ext = require('./dashboard_ext.js');
+let DASH2_CACHE = { at: 0, data: null, period: null };
+route('GET', '/api/dashboard2', (c) => {
+  const period = ['month', 'quarter', 'ytd', '30d'].includes(c.url.searchParams.get('period'))
+    ? c.url.searchParams.get('period') : 'ytd';
+  const nowMs = Date.now();
+  if (DASH2_CACHE.data && DASH2_CACHE.period === period && nowMs - DASH2_CACHE.at < 30000)
+    return ok(c.res, DASH2_CACHE.data);
+  const data = {
+    snapshot: dash.snapshot(),
+    action_items: ext.actionItems(),
+    activity: ext.activity(10),
+    low_stock: ext.lowStock(8),
+    trend: ext.trend(),
+    top_products: ext.topProducts(period),
+    top_customers: ext.topCustomers(period),
+    sales_period: ext.salesByPeriod(period),
+    billing_aging: ext.billingAging(),
+    period,
+  };
+  DASH2_CACHE = { at: nowMs, data, period };
+  return ok(c.res, data);
+});
 route('GET', '/api/profitability', (c) => {
   const list = dash.profitability().map(r => ({ ...r,
     gross_profit: r.revenue - r.cost,

@@ -16,6 +16,11 @@ function toast(msg, err) {
 }
 const badge = s => `<span class="badge b-${String(s).replace(/\s/g,'_')}">${String(s).replace(/_/g,' ')}</span>`;
 const opt = (list, valKey, lbl) => list.map(x => `<option value="${x[valKey]}">${lbl(x)}</option>`).join('');
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const kpiCard = (l, v, cls, jump, sub) =>
+  `<div class="kpi${jump ? ' jump' : ''}"${jump ? ` onclick="go('${jump}')"` : ''}>
+    <div class="lbl">${l}</div><div class="val ${cls || ''}">${v}</div>
+    ${sub ? `<div class="ksub">${sub}</div>` : ''}</div>`;
 
 let PRODUCTS = [], PARTNERS = [], WAREHOUSES = [], PROJECTS = [];
 
@@ -23,41 +28,86 @@ let PRODUCTS = [], PARTNERS = [], WAREHOUSES = [], PROJECTS = [];
 const views = {};
 
 views.dash = async () => {
-  const d = await api('/dashboard');
-  const kpi = (l, v, cls) => `<div class="kpi"><div class="lbl">${l}</div><div class="val ${cls||''}">${v}</div></div>`;
+  const period = window.dashPeriod || 'ytd';
+  const d = await api('/dashboard2?period=' + period);
+  const s = d.snapshot;
+  window.dashPeriod = period;
+  const zero = v => Number(v || 0) === 0 ? ' mut0' : '';
+  const bars = d.trend.map(t => {
+    const max = Math.max(...d.trend.map(x => x.sales), 1);
+    const h = Math.round(t.sales / max * 88) + 2;
+    const isCur = t.ym === new Date().toISOString().slice(0, 7);
+    return `<div class="bar${isCur ? ' cur' : ''}" style="height:${h}px"><span>${t.sales > 0 ? Math.round(t.sales / 1e6) + 'M' : ''}</span></div><i>${t.label}</i>`;
+  }).join('');
+  const actBtn = (t, id, st) => st === 'DRAFT'
+    ? `<button class="btn sm gray" onclick="act('${t}',${id},'submit')">Submit</button>`
+    : st === 'SUBMITTED'
+    ? `<button class="btn sm" onclick="act('${t}',${id},'approve')">Approve</button><button class="btn sm warn" onclick="act('${t}',${id},'reject')">Reject</button>`
+    : `<button class="btn sm" onclick="act('${t}',${id},'post')">Post</button>`;
+  const LINK = { quotations: 'docs', sales_orders: 'docs', purchase_orders: 'docs',
+    receivings: 'docs', stock_transfers: 'transfer' };
+  const plabel = { month: 'This Month', quarter: 'This Quarter', ytd: 'Year to Date', '30d': 'Last 30 Days' }[period];
+  const acts = d.action_items.map(a => `<tr>
+    <td><a href="#" onclick="go('${LINK[a.table] || 'docs'}');return false" style="color:inherit"><b>${esc(a.doc_no)}</b></a></td>
+    <td>${a.label}</td><td class="mut">${a.date || ''}</td><td>${badge(a.status)}</td>
+    <td class="money">${a.amount != null ? fmt(a.amount) : '—'}</td>
+    <td>${actBtn(a.table, a.id, a.status)}</td></tr>`).join('');
+  const feed = d.activity.map(a => `<div class="frow"><span class="fdot"></span>
+    <div><b>${esc(a.username || 'system')}</b> <span class="mut">${esc(a.action.toLowerCase())}</span>
+    ${a.doc_no ? `<b>${esc(a.doc_no)}</b>` : esc(a.module)} ${a.new_value ? `<span class="mut">→ ${esc(String(a.new_value).slice(0, 40))}</span>` : ''}
+    <div class="mut ftime">${esc(a.at)}</div></div></div>`).join('');
+  const per = ['month', 'quarter', 'ytd', '30d'].map(p =>
+    `<button class="btn sm ${p === period ? '' : 'gray'}" onclick="window.dashPeriod='${p}';views.dash()">${{ month: 'Month', quarter: 'Quarter', ytd: 'YTD', '30d': '30d' }[p]}</button>`).join('');
   main.innerHTML = `
   <div class="welcome"><img src="/logo.png" alt="PT MTJ">
     <div><h1>Welcome to MTJ Channel Manager</h1>
     <div class="wsub">PT Monalisa Tunggal Jaya — Your One-Stop Partner for Professional Lighting, Audio &amp; LED Visual Systems</div>
     <div class="tagline">“Your Potential. Our Passion.”</div></div>
   </div>
-  <h2>Sales</h2><div class="grid">
-    ${kpi('Sales This Month', fmt(d.sales_this_month), 'teal')}
-    ${kpi('Sales This Year', fmt(d.sales_this_year), 'teal')}
-    ${kpi('Retail Sales (Yr)', fmt(d.retail_sales))}
-    ${kpi('Project Sales (Yr)', fmt(d.project_sales))}
-    ${kpi('PPN Sales (Yr)', fmt(d.ppn_sales))}
-    ${kpi('Non-PPN Sales (Yr)', fmt(d.non_ppn_sales))}
-    ${kpi('Outstanding Project Billing', fmt(d.outstanding_billing), 'amber')}
+  <div class="dashhead"><h2 style="border:none;margin:0">Needs Your Action (${d.action_items.length})</h2>
+    <div class="pbtns">${per}</div></div>
+  ${d.action_items.length ? `<table class="acts"><tr><th>Doc</th><th>Type</th><th>Date</th><th>Status</th>
+    <th class="money">Amount</th><th>Actions</th></tr>${acts}</table>`
+    : '<div class="mut" style="margin:2px 0 6px">Nothing waiting — queue is clear. 🎉</div>'}
+  <h2>Sales — ${plabel}</h2><div class="grid">
+    ${kpiCard('Sales ' + plabel, fmt(d.sales_period.s), 'teal', null,
+      `${d.sales_period.c} posted order(s) · Retail ${fmt(d.sales_period.retail)} · Project ${fmt(d.sales_period.project)} · PPN ${fmt(d.sales_period.ppn)}`)}
+    ${kpiCard('Outstanding Project Billing', fmt(s.outstanding_billing), s.outstanding_billing > 0 ? 'amber' : '', 'projects')}
   </div>
-  <h2>Stock</h2><div class="grid">
-    ${kpi('Stock Value (avg cost)', fmt(d.stock_value))}
-    ${kpi('Reserved Stock', d.reserved_stock)}
-    ${kpi('Available Stock', d.available_stock)}
-    ${kpi('Low Stock Items', d.low_stock, d.low_stock > 0 ? 'amber' : '')}
+  <div class="cols2">
+    <div><h2 style="margin-top:14px">12-Month Trend</h2><div class="chartbox"><div class="bars">${bars}</div></div></div>
+    <div><h2 style="margin-top:14px">Recent Activity</h2><div class="feedbox">${feed || '<div class="mut">no activity yet</div>'}</div></div>
   </div>
+  <h2>Stock &amp; Inventory</h2><div class="grid">
+    ${kpiCard('Stock Value (avg cost)', fmt(s.stock_value), '', 'stock')}
+    ${kpiCard('Available Stock', s.available_stock, '', 'stock')}
+    ${kpiCard('Low Stock Items', s.low_stock, s.low_stock > 0 ? 'amber' : '', 'stock')}
+    ${kpiCard('Reserved', s.reserved_stock, '', 'stock')}
+  </div>
+  ${d.low_stock.length ? `<table><tr><th>Code</th><th>Product</th><th>Warehouse</th>
+    <th class="money">Available</th><th class="money">Reorder Pt</th></tr>
+    ${d.low_stock.map(r => `<tr><td><a href="#" onclick="go('item-${r.id}');return false" style="color:inherit"><b>${esc(r.code)}</b></a></td>
+      <td>${esc(r.name)} <span class="mut">${esc(r.brand || '')}</span></td><td>${esc(r.wh_name)}</td>
+      <td class="money"><b class="low">${r.available}</b></td><td class="money">${r.reorder_point}</td></tr>`).join('')}</table>`
+    : ''}
   <h2>Purchasing</h2><div class="grid">
-    ${kpi('Purchase Value', fmt(d.purchase_value))}
-    ${kpi('Local Purchase', fmt(d.local_purchase))}
-    ${kpi('Import Purchase', fmt(d.import_purchase))}
+    ${kpiCard('Purchase Value (open+posted)', fmt(s.purchase_value), '', 'docs')}
+    ${kpiCard('Local Purchase', fmt(s.local_purchase), zero(s.local_purchase), 'docs')}
+    ${kpiCard('Import Purchase', fmt(s.import_purchase), zero(s.import_purchase), 'docs')}
   </div>
-  <h2>Service · Warranty · Field</h2><div class="grid">
-    ${kpi('Open Service', d.open_service)}
-    ${kpi('Completed Service', d.completed_service)}
-    ${kpi('Active Warranty', d.active_warranty)}
-    ${kpi('Warranty Claims', d.warranty_claims)}
-    ${kpi('Open Work Orders', d.open_work_orders)}
-    ${kpi('Active Projects', d.active_projects)}
+  <div class="cols2">
+    <div><h2 style="margin-top:14px">Billing Aging (Project)</h2>
+      ${s.outstanding_billing > 0 || d.billing_aging.total > 0 ? `<div class="grid" style="grid-template-columns:repeat(2,1fr)">
+      ${d.billing_aging.buckets.map(b => kpiCard(b.label, fmt(b.amount), b.k === 'd90' && b.amount > 0 ? 'amber' : zero(b.amount).trim(), null)).join('')}
+      </div>` : '<div class="mut">No open project billings yet.</div>'}</div>
+    <div><h2 style="margin-top:14px">Service · Warranty · Field</h2><div class="grid" style="grid-template-columns:repeat(2,1fr)">
+      ${kpiCard('Open Service', s.open_service, zero(s.open_service), 'warranty')}
+      ${kpiCard('Completed Service', s.completed_service, '', 'warranty')}
+      ${kpiCard('Active Warranty', s.active_warranty, '', 'warranty')}
+      ${kpiCard('Warranty Claims', s.warranty_claims, zero(s.warranty_claims), 'warranty')}
+      ${kpiCard('Open Work Orders', s.open_work_orders, zero(s.open_work_orders), 'warranty')}
+      ${kpiCard('Active Projects', s.active_projects, '', 'projects')}
+    </div></div>
   </div>`;
 };
 

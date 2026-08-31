@@ -72,6 +72,29 @@ padding:10px 16px;border-radius:9px;display:none;font-size:13px;z-index:9;box-sh
 #logout{background:transparent;border:1px solid var(--line);color:var(--mut);border-radius:7px;
 padding:5px 10px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;margin-left:8px}
 #logout:hover{border-color:var(--hi);color:var(--hi)}
+.dashhead{display:flex;align-items:center;justify-content:space-between;margin:20px 0 8px}
+.dashhead h2{font-size:13px;color:var(--hi);letter-spacing:.1em}
+.pbtns{display:flex;gap:6px}
+.pbtns .btn{margin:0}
+.kpi.jump{cursor:pointer;transition:transform .12s,box-shadow .12s}
+.kpi.jump:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(27,54,145,.16);border-color:var(--panel2)}
+.kpi .ksub{color:var(--mut);font-size:10.5px;margin-top:5px;line-height:1.4}
+.val.mut0, .kpi .val.mut0{opacity:.32;filter:grayscale(1)}
+.chartbox{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 14px 8px}
+.bars{display:flex;align-items:flex-end;gap:7px;height:120px}
+.bars .bar{flex:1;background:linear-gradient(180deg,#2f56c4,#1b3691);border-radius:4px 4px 0 0;min-height:2px;position:relative}
+.bars .bar.cur{background:linear-gradient(180deg,#ff8a2a,#e56f10)}
+.bars .bar span{position:absolute;top:-16px;left:50%;transform:translateX(-50%);font-size:9.5px;color:var(--hi);font-weight:600;white-space:nowrap}
+.bars i{flex:1;text-align:center;font-style:normal;font-size:9.5px;color:var(--mut);margin-top:4px}
+.bars .bar span{display:none}
+.bars .bar:hover span,.bars .bar.cur span{display:block}
+.cols2{display:grid;grid-template-columns:1.15fr 1fr;gap:16px;align-items:start}
+.feedbox{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px;max-height:178px;overflow-y:auto}
+.frow{display:flex;gap:9px;padding:6px 0;border-bottom:1px dashed var(--line);font-size:12.5px}
+.frow:last-child{border-bottom:none}
+.fdot{width:7px;height:7px;border-radius:50%;background:var(--panel2);margin-top:6px;flex-shrink:0}
+.ftime{font-size:10.5px;margin-top:1px}
+table.acts td{padding:7px 10px}
 </style>
 </head>
 <body>
