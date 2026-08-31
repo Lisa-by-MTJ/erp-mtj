@@ -6,41 +6,52 @@
 <title>MTJ Channel Manager — Sign in</title>
 <link rel="icon" type="image/png" href="/favicon.png">
 <style>
-:root{--paper:#f2efe7;--ink:#161412;--mut:#6f6a61;--line:#c9c3b6}
+:root{--paper:#f3f4f8;--ink:#101425;--mut:#5d6478;--line:#c9cede;--hi:#1b3691;
+--grad:linear-gradient(160deg,#0e1a45 0%,#1b3691 58%,#2f56c4 100%)}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
-body{background:var(--paper);color:var(--ink);font:15px/1.5 'Segoe UI',system-ui,sans-serif;
-  display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px}
-.frame{max-width:400px;width:100%;text-align:center}
-.kicker{font-family:ui-monospace,'Cascadia Mono',Consolas,monospace;font-size:10.5px;
-  letter-spacing:.32em;color:var(--mut);text-transform:uppercase}
+body{background:linear-gradient(180deg,#e9ecf5 0%,var(--paper) 40%,#dfe4f2 100%);color:var(--ink);
+  font:15px/1.5 'Segoe UI',system-ui,sans-serif;display:flex;align-items:center;justify-content:center;
+  min-height:100vh;padding:24px}
+.frame{max-width:420px;width:100%;text-align:center}
+.mast{background:var(--grad);border-radius:16px 16px 0 0;padding:30px 28px 24px;color:#fff;
+  box-shadow:0 10px 30px rgba(14,26,69,.35);position:relative;overflow:hidden}
+.mast::after{content:'';position:absolute;right:-70px;top:-100px;width:280px;height:280px;border-radius:50%;
+  background:radial-gradient(circle,rgba(47,86,196,.55),transparent 70%)}
+.mast img{width:86px;height:auto;filter:drop-shadow(0 3px 10px rgba(0,0,0,.4))}
+.kicker{font-family:ui-monospace,'Cascadia Mono',Consolas,monospace;font-size:10px;
+  letter-spacing:.2em;color:#aab6e3;text-transform:uppercase;margin-top:12px;white-space:nowrap}
 h1{font-family:Georgia,'Times New Roman',serif;font-style:italic;font-weight:600;
-  font-size:31px;letter-spacing:.01em;margin:10px 0 2px}
-.rule{width:210px;margin:18px auto;border:none;border-top:3px double var(--ink)}
-.box{border:1px solid var(--ink);background:var(--paper);padding:30px 30px 26px;text-align:left}
+  font-size:30px;letter-spacing:.01em;margin:8px 0 2px;color:#fff}
+.tagline{font-family:ui-monospace,monospace;font-size:10px;letter-spacing:.26em;color:#ffcf9e;
+  text-transform:uppercase;margin-top:8px}
+.box{border:1px solid var(--line);border-top:none;background:#fff;padding:30px 30px 26px;text-align:left;
+  border-radius:0 0 16px 16px;box-shadow:0 10px 30px rgba(14,26,69,.12)}
 label{display:block;font-family:ui-monospace,monospace;font-size:10px;letter-spacing:.22em;
   text-transform:uppercase;color:var(--mut);margin:0 0 6px}
 input{width:100%;background:transparent;border:none;border-bottom:1px solid var(--ink);
   color:var(--ink);font:15px/1.4 inherit;padding:7px 2px;outline:none;border-radius:0}
-input:focus{border-bottom-width:2px}
+input:focus{border-bottom:2px solid var(--hi)}
 .f{margin-bottom:20px}
-button{width:100%;margin-top:6px;background:var(--ink);color:var(--paper);border:1px solid var(--ink);
+button{width:100%;margin-top:6px;background:var(--grad);color:#fff;border:1px solid var(--hi);
   padding:11px 16px;font-family:ui-monospace,monospace;font-size:11.5px;letter-spacing:.28em;
-  text-transform:uppercase;cursor:pointer}
-button:hover{background:transparent;color:var(--ink)}
-.err{border:1px solid var(--ink);background:var(--paper);padding:9px 12px;margin-bottom:18px;
-  font-family:ui-monospace,monospace;font-size:11.5px;letter-spacing:.14em;text-transform:uppercase}
+  text-transform:uppercase;cursor:pointer;border-radius:8px}
+button:hover{background:linear-gradient(135deg,#0e1a45,#1b3691);box-shadow:0 4px 14px rgba(27,54,145,.35)}
+.err{border:1px solid #8a1c1c;background:#faf1f1;color:#8a1c1c;padding:9px 12px;margin-bottom:18px;
+  font-family:ui-monospace,monospace;font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;border-radius:6px}
 .foot{margin-top:22px;font-family:ui-monospace,monospace;font-size:9.5px;letter-spacing:.26em;
   text-transform:uppercase;color:var(--mut)}
-.foot b{color:var(--ink);font-weight:600}
+.foot b{color:var(--hi);font-weight:600}
 </style>
 </head>
 <body>
 <div class="frame">
-  <div class="kicker">PT Monalisa Tunggal Jaya · est. 1980</div>
-  <h1>MTJ Channel Manager</h1>
-  <div class="kicker">Your Potential. Our Passion.</div>
-  <hr class="rule">
+  <div class="mast">
+    <img src="/logo.png" alt="PT MTJ">
+    <div class="kicker">PT Monalisa Tunggal Jaya · est. 1980</div>
+    <h1>MTJ Channel Manager</h1>
+    <div class="tagline">Your Potential. Our Passion.</div>
+  </div>
   <form class="box" method="POST" action="/login">
     <div class="err" id="err" style="display:none">Invalid username or password</div>
     <div class="f"><label>Username</label><input name="username" autocomplete="username" autofocus required></div>

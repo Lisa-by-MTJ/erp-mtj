@@ -26,7 +26,11 @@ views.dash = async () => {
   const d = await api('/dashboard');
   const kpi = (l, v, cls) => `<div class="kpi"><div class="lbl">${l}</div><div class="val ${cls||''}">${v}</div></div>`;
   main.innerHTML = `
-  <h1>Management Dashboard</h1><div class="sub">§47 — one screen: sales, stock, projects, warranty, service, KPI</div>
+  <div class="welcome"><img src="/logo.png" alt="PT MTJ">
+    <div><h1>Welcome to MTJ Channel Manager</h1>
+    <div class="wsub">PT Monalisa Tunggal Jaya — Your One-Stop Partner for Professional Lighting, Audio &amp; LED Visual Systems</div>
+    <div class="tagline">“Your Potential. Our Passion.”</div></div>
+  </div>
   <h2>Sales</h2><div class="grid">
     ${kpi('Sales This Month', fmt(d.sales_this_month), 'teal')}
     ${kpi('Sales This Year', fmt(d.sales_this_year), 'teal')}
@@ -285,7 +289,7 @@ views.profit = async () => {
   <th class="money">Gross Profit</th><th class="money">Margin %</th><th>Status</th></tr>
   ${list.map(r => { const neg = r.gross_profit < 0;
     return `<tr><td><b>${r.project_code}</b> ${r.name}</td><td class="money">${fmt(r.revenue)}</td>
-    <td class="money">${fmt(r.cost)}</td><td class="money" style="color:${neg?'#f87171':'#4ade80'}">${fmt(r.gross_profit)}</td>
+    <td class="money" style="color:${neg?'#8a1c1c':'#1b3691'}">${fmt(r.gross_profit)}</td>
     <td class="money">${r.gross_margin_pct}%</td><td>${badge(r.status)}</td></tr>`; }).join('')}</table>`;
 };
 views.delivery = async () => {
