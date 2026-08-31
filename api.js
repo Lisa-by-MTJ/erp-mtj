@@ -624,6 +624,19 @@ route('GET', '/api/dashboard2', (c) => {
   DASH2_CACHE = { at: nowMs, data, period };
   return ok(c.res, data);
 });
+
+// ---- Lisa in-ERP assistant (auth-gated; stateless; 30 req/min per user) ----
+const lisa = require('./lisa_chat.js');
+const LISA_BURST = {};
+route('POST', '/api/lisa', async (c) => {
+  const uname = (c.user && c.user.username) || 'anon';
+  const nowMin = Math.floor(Date.now() / 60000);
+  if (!LISA_BURST[uname] || LISA_BURST[uname].min !== nowMin) LISA_BURST[uname] = { min: nowMin, n: 0 };
+  if (++LISA_BURST[uname].n > 30) return bad(c.res, 429, 'Terlalu banyak pesan — pelan-pelan ya 🙂');
+  const body = await readBody(c.req);
+  const out = await lisa.reply(String(body.message || ''));
+  return ok(c.res, out);
+});
 route('GET', '/api/profitability', (c) => {
   const list = dash.profitability().map(r => ({ ...r,
     gross_profit: r.revenue - r.cost,

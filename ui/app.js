@@ -694,4 +694,57 @@ window.addWarehouse = async ev => {
   return false;
 };
 
+// ---------------- Lisa chat (in-page only; ends on logout/reload) ----------------
+const LISA_HISTORY = []; // intentionally NOT persisted — session ends with logout
+window.lisaToggle = () => {
+  const box = $('#lisa-box');
+  box.classList.toggle('open');
+  if (box.classList.contains('open')) {
+    if (!LISA_HISTORY.length) lisaBot('Halo! 👋 Aku Lisa. Tanya apa hari ini — stok, harga, sales, atau approval?');
+    $('#lisa-q').focus();
+  }
+};
+window.lisaQuick = t => { $('#lisa-q').value = t; lisaSend(); };
+const lisaMd = s => esc(s)
+  .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+  .replace(/\*(.+?)\*/g, '<i>$1</i>');
+function lisaPush(cls, html) {
+  const log = $('#lisa-log');
+  log.insertAdjacentHTML('beforeend', `<div class="lisa-msg ${cls}">${html}</div>`);
+  log.scrollTop = log.scrollHeight;
+}
+function lisaBot(text, goto) {
+  lisaPush('bot', lisaMd(text));
+  if (goto) {
+    const [v, label] = goto;
+    const btn = document.createElement('div');
+    btn.className = 'lisa-goto';
+    btn.innerHTML = `<button onclick="go('${v}');$('#lisa-box').classList.remove('open')">Buka ${esc(label)} →</button>`;
+    $('#lisa-log').appendChild(btn);
+    $('#lisa-log').scrollTop = $('#lisa-log').scrollHeight;
+  }
+}
+window.lisaSend = async () => {
+  const inp = $('#lisa-q');
+  const q = inp.value.trim();
+  if (!q) return;
+  inp.value = '';
+  lisaPush('user', esc(q));
+  LISA_HISTORY.push({ who: 'user', text: q });
+  lisaPush('bot', '<span class="mut">…</span>');
+  try {
+    const r = await api('/lisa', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: q }) });
+    const log = $('#lisa-log');
+    log.lastElementChild.remove(); // drop the typing dots
+    lisaBot(r.text, r.goto);
+    LISA_HISTORY.push({ who: 'bot', text: r.text });
+  } catch (e) {
+    const log = $('#lisa-log');
+    log.lastElementChild.remove();
+    lisaBot('Ups — ' + e.message);
+  }
+};
+$('#lisa-q').addEventListener('keydown', ev => { if (ev.key === 'Enter') lisaSend(); });
+
 go('dash');
