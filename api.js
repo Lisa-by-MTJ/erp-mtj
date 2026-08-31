@@ -58,7 +58,11 @@ function insertLines(lcTable, fkCol, id, lines) {
          VALUES(?,?,?,?,?,?)`,
         id, l.product_id, l.qty, l.unit_price, l.discount_pct || 0,
         Math.round(l.qty * l.unit_price * (1 - (l.discount_pct || 0) / 100) * 100) / 100);
-    if (l.serials && l.serials.length) run(`UPDATE ${lcTable} SET serials='${JSON.stringify(l.serials)}' WHERE id=${one(`SELECT MAX(id) mid FROM ${lcTable}`).mid}`);
+    if (l.serials && l.serials.length) {
+      // bound parameters only — serials come from user input, never interpolate (P0-1)
+      const lineId = one(`SELECT MAX(id) mid FROM ${lcTable}`).mid;
+      run(`UPDATE ${lcTable} SET serials=? WHERE id=?`, JSON.stringify(l.serials), lineId);
+    }
     void lcTable;
   }
 }

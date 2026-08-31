@@ -18,7 +18,27 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript',
   '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon' };
 
 // ---- stateless session tokens: <exp>.<hmac(secret, user+exp)> ----
-const SECRET = crypto.createHash('sha256').update('mtj-erp-session:' + USER + ':' + PASS).digest();
+// Report fix: secret must not be derived from the Basic-Auth password (rotation/
+// disclosure coupling). Prefer MTJ_SESSION_SECRET env; else persist a random key
+// per data dir; last resort derives from credentials (pre-2016 Node fallback).
+const SECRET = (() => {
+  if (process.env.MTJ_SESSION_SECRET && process.env.MTJ_SESSION_SECRET.length >= 32)
+    return crypto.createHash('sha256').update(process.env.MTJ_SESSION_SECRET).digest();
+  try {
+    const dataDir = process.env.MTJ_DATA_DIR || path.join(__dirname, 'data');
+    const kf = path.join(dataDir, 'session_secret.key');
+    let k = null;
+    try { k = fs.readFileSync(kf, 'utf8').trim(); } catch (e) { /* first boot */ }
+    if (!k || k.length < 64) {
+      k = crypto.randomBytes(48).toString('hex');
+      fs.writeFileSync(kf, k + '\n', { mode: 0o600 });
+    }
+    return crypto.createHash('sha256').update('mtj-erp-session:' + k).digest();
+  } catch (e) {
+    console.error('[MTJ-ERP] WARN: could not persist session secret, deriving from credentials');
+    return crypto.createHash('sha256').update('mtj-erp-session:' + USER + ':' + PASS).digest();
+  }
+})();
 const TTL_MS = 7 * 24 * 3600 * 1000;
 const { db, verifyPassword } = require('./db.js');
 // username-bound token: <username>.<exp>.<hmac(secret, username+exp)>
@@ -70,9 +90,40 @@ function credsOK(user, pass) {
 function send(res, code, body, type, headers) {
   const buf = typeof body === 'string' ? Buffer.from(body) : body;
   res.writeHead(code, Object.assign({ 'Content-Type': type || 'application/json; charset=utf-8',
-    'Cache-Control': 'no-store' }, headers || {}));
+    'Cache-Control': 'no-store' }, SECURITY_HEADERS, headers || {}));
   res.end(buf);
 }
+
+// ---- security headers (report P1) — applied to every response via send() ----
+const SECURITY_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Referrer-Policy': 'no-referrer',
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+  'Content-Security-Policy': "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'",
+  'Strict-Transport-Security': 'max-age=31536000; includeSubDomains'
+};
+
+// ---- login rate limiting (report P1): 10 failures / 15 min / IP+username ----
+const LOGIN_FAILS = new Map();
+const RATE_WINDOW_MS = 15 * 60 * 1000, RATE_MAX_FAILS = 10;
+function loginBlocked(key) {
+  const e = LOGIN_FAILS.get(key);
+  return !!e && e.count >= RATE_MAX_FAILS && (Date.now() - e.first) < RATE_WINDOW_MS;
+}
+function loginFail(key) {
+  const now = Date.now();
+  const e = LOGIN_FAILS.get(key);
+  if (!e || (now - e.first) >= RATE_WINDOW_MS) LOGIN_FAILS.set(key, { first: now, count: 1 });
+  else e.count++;
+  if (LOGIN_FAILS.size > 1000) for (const [k, v] of LOGIN_FAILS) if ((now - v.first) >= RATE_WINDOW_MS) LOGIN_FAILS.delete(k);
+}
+const loginKey = (req, u) => {
+  // All public traffic arrives via the Cloudflare tunnel (socket addr is 127.0.0.1),
+  // so use the real client IP when Cloudflare provides it.
+  const ip = req.headers['cf-connecting-ip'] || req.socket.remoteAddress || '?';
+  return `${ip}|${String(u || '').toLowerCase()}`;
+};
 
 function start(port) {
   const srv = http.createServer((req, res) => {
@@ -100,25 +151,34 @@ function start(port) {
         return req.on('end', () => {
           const q = new URLSearchParams(body);
           const u = String(q.get('username') || ''), pw = String(q.get('password') || '');
+          const key = loginKey(req, u);
+          // brute-force guard: 10 failed attempts / 15 min per IP+username
+          if (loginBlocked(key)) {
+            console.log(`[MTJ-ERP] login rate-limited: ${key.split('|')[0]} (user=${u})`);
+            return send(res, 302, '', 'text/plain', { 'Location': '/login?e=1' });
+          }
           // 1) DB users (scrypt-hashed, role-backed)
           const row = db.prepare(`SELECT * FROM users WHERE username=? AND is_active=1`).get(u);
           if (row && verifyPassword(pw, row.password_hash)) {
+            LOGIN_FAILS.delete(key);
             return send(res, 302, '', 'text/plain', {
-              'Set-Cookie': `${COOKIE}=${newTokenFor(u)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${TTL_MS / 1000}`,
+              'Set-Cookie': `${COOKIE}=${newTokenFor(u)}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${TTL_MS / 1000}`,
               'Location': '/' });
           }
           // 2) legacy env admin fallback (kept so --env-file credentials always work)
           if (credsOK(u, pw)) {
+            LOGIN_FAILS.delete(key);
             return send(res, 302, '', 'text/plain', {
-              'Set-Cookie': `${COOKIE}=${newTokenFor(u)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${TTL_MS / 1000}`,
+              'Set-Cookie': `${COOKIE}=${newTokenFor(u)}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${TTL_MS / 1000}`,
               'Location': '/' });
           }
+          loginFail(key);
           return send(res, 302, '', 'text/plain', { 'Location': '/login?e=1' });
         });
       }
       if (p === '/logout') {
         return send(res, 302, '', 'text/plain', {
-          'Set-Cookie': `${COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`,
+          'Set-Cookie': `${COOKIE}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`,
           'Location': '/login' });
       }
 

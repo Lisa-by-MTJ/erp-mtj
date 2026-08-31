@@ -156,14 +156,14 @@ views.stock = async () => {
   </div>
   <table><tr><th>Code</th><th>Product</th><th>EAN</th><th>Warehouse</th><th class="money">Physical</th>
   <th class="money">Reserved</th><th class="money">Available</th><th class="money">Value</th></tr>
-  ${rows.map(r => `<tr><td><a href="#" onclick="go('item-${r.product_id}');return false" style="color:inherit"><b>${r.code}</b></a></td><td>${r.name} <span class="mut">${r.brand||''}</span></td><td class="mut">${r.barcode||'—'}</td><td>${r.wh_name}</td>
+  ${rows.map(r => `<tr><td><a href="#" onclick="go('item-${r.product_id}');return false" style="color:inherit"><b>${esc(r.code)}</b></a></td><td>${esc(r.name)} <span class="mut">${esc(r.brand||'')}</span></td><td class="mut">${esc(r.barcode||'—')}</td><td>${esc(r.wh_name)}</td>
     <td class="money">${r.physical}</td><td class="money">${r.reserved}</td>
     <td class="money"><b class="${r.available<=0?'low':'ok'}">${r.available}</b></td>
     <td class="money">${fmt(r.stock_value)}</td></tr>`).join('')}</table>
   <h2>Recent Movements (§20)</h2>
   <table><tr><th>ID</th><th>Type</th><th>Product</th><th>Wh</th><th class="money">ΔQty</th><th>Ref</th></tr>
   ${(await api('/movements')).slice(0,15).map(m => `<tr><td>${m.id}</td><td>${m.movement_type}</td>
-    <td>${m.pcode}</td><td>${m.wh_name}</td><td class="money ${m.qty_delta<0?'low':'ok'}">${m.qty_delta}</td>
+    <td>${esc(m.pcode)}</td><td>${esc(m.wh_name)}</td><td class="money ${m.qty_delta<0?'low':'ok'}">${m.qty_delta}</td>
     <td class="mut">${m.ref_no||''}</td></tr>`).join('')}</table>`;
 };
 window.addProduct = async ev => {
@@ -189,7 +189,7 @@ views.docs = async () => {
     const list = await api('/docs/' + t);
     html += `<h2>${label}</h2><table><tr><th>Doc No</th><th>Partner / Route</th><th>Date</th>
       <th>Status</th><th>Actions</th></tr>` +
-      list.slice(0, 12).map(d => `<tr><td><b>${d.doc_no}</b></td><td>${d.partner_name||d.from_name+' → '+d.to_name||'—'}</td><td>${d.po_date||d.receive_date||d.quote_date||d.so_date||d.transfer_date||''}</td>
+      list.slice(0, 12).map(d => `<tr><td><b>${esc(d.doc_no)}</b></td><td>${esc(d.partner_name||d.from_name+' → '+d.to_name||'—')}</td><td>${d.po_date||d.receive_date||d.quote_date||d.so_date||d.transfer_date||''}</td>
         <td>${badge(d.status)}</td>
         <td>${wfBtns(t, d)}</td></tr>`).join('') + '</table>';
   }
@@ -215,7 +215,7 @@ views.newdoc = async () => {
   const cOpts = opt(PARTNERS.filter(p => p.kind === 'CUSTOMER'), 'id', p => p.name);
   const sOpts = opt(PARTNERS.filter(p => p.kind === 'SUPPLIER'), 'id', p => p.name);
   const wOpts = opt(WAREHOUSES, 'id', w => w.name);
-  const pOpts = PRODUCTS.map(p => `<option value="${p.id}" data-price="${p.retail_price}">${p.code} — ${p.name}</option>`).join('');
+  const pOpts = PRODUCTS.map(p => `<option value="${p.id}" data-price="${p.retail_price}">${esc(p.code)} — ${esc(p.name)}</option>`).join('');
   main.innerHTML = `
   <h1>New Document</h1><div class="sub">Create Quotation / Sales Order / Purchase Order / Receiving</div>
   <div class="formbox"><h2 style="margin-top:0">Quotation or Sales Order</h2>
@@ -250,7 +250,7 @@ views.newdoc = async () => {
 };
 function lineRow(i) {
   return `<tr><td style="width:45%"><select onchange="ndLines[${i}].pid=+this.value;updTotal()" id="nl-p${i}">
-    ${PRODUCTS.map(p => `<option value="${p.id}" data-rl="${p.retail_price}">${p.code} — ${p.name}</option>`).join('')}</select></td>
+    ${PRODUCTS.map(p => `<option value="${p.id}" data-rl="${p.retail_price}">${esc(p.code)} — ${esc(p.name)}</option>`).join('')}</select></td>
     <td><input type="number" id="nl-q${i}" value="1" min="1" oninput="ndLines[${i}].qty=+this.value;updTotal()"></td>
     <td><input type="number" id="nl-pr${i}" value="${PRODUCTS[0] ? PRODUCTS[0].retail_price : 0}" oninput="ndLines[${i}].price=+this.value;updTotal()"></td>
     <td><input type="number" id="nl-d${i}" value="0" min="0" max="100" oninput="ndLines[${i}].disc=+this.value;updTotal()"></td></tr>`;
@@ -307,7 +307,7 @@ views.projects = async () => {
   main.innerHTML = `<h1>Projects</h1><div class="sub">§24-§27 · billing ≠ delivery · Control Tower per project</div>
   <table><tr><th>Code</th><th>Project</th><th>Customer</th><th class="money">Contract</th>
   <th class="money">Billed</th><th class="money">Outstanding</th><th class="money">Cost</th><th>Status</th><th></th></tr>
-  ${list.map(p => `<tr><td><b>${p.project_code}</b></td><td>${p.name}</td><td>${p.customer_name}</td>
+  ${list.map(p => `<tr><td><b>${esc(p.project_code)}</b></td><td>${esc(p.name)}</td><td>${esc(p.customer_name)}</td>
    <td class="money">${fmt(p.contract_value)}</td><td class="money">${fmt(p.billing_total)}</td>
    <td class="money ${p.outstanding>0?'low':'ok'}">${fmt(p.outstanding)}</td>
    <td class="money">${fmt(p.cost_total)}</td><td>${badge(p.status)}</td>
@@ -316,8 +316,8 @@ views.projects = async () => {
 window.tower = async id => {
   const t = await api('/projects/' + id);
   const p = t.project;
-  main.innerHTML = `<h1>🔦 Project Control Tower — ${p.project_code}</h1>
-  <div class="sub">${p.name} · ${p.customer_name} · site: ${p.site_location||'—'}</div>
+  main.innerHTML = `<h1>🔦 Project Control Tower — ${esc(p.project_code)}</h1>
+  <div class="sub">${esc(p.name)} · ${esc(p.customer_name)} · site: ${esc(p.site_location||'—')}</div>
   <div class="grid">
     <div class="kpi"><div class="lbl">Contract Value</div><div class="val teal">${fmt(p.contract_value)}</div></div>
     <div class="kpi"><div class="lbl">Billed</div><div class="val">${fmt(t.billings.reduce((s,b)=>s+b.amount,0))}</div></div>
@@ -326,11 +326,11 @@ window.tower = async id => {
   </div>
   <h2>Billing Milestones (§25)</h2>
   <table><tr><th>#</th><th>Milestone</th><th class="money">Amount</th><th>Status</th><th>Action</th></tr>
-  ${t.billings.map(b => `<tr><td>${b.seq}</td><td>${b.label} (${b.percent}%)</td><td class="money">${fmt(b.amount)}</td>
+  ${t.billings.map(b => `<tr><td>${b.seq}</td><td>${esc(b.label)} (${b.percent}%)</td><td class="money">${fmt(b.amount)}</td>
    <td>${badge(b.status)}</td><td>${b.status!=='PAID'?`<button class="btn sm" onclick="payBill(${p.id},${b.id})">Mark Paid</button>`:''}</td></tr>`).join('')}</table>
   <h2>Deliveries / Surat Jalan</h2>
   <table><tr><th>DO</th><th>Surat Jalan</th><th>Date</th><th>Status</th></tr>
-  ${t.deliveries.map(d => `<tr><td>${d.doc_no}</td><td>${d.surat_jalan_no}</td><td>${d.do_date}</td><td>${badge(d.status)}</td></tr>`).join('') || '<tr><td colspan=4 class=mut>none yet</td></tr>'}</table>
+  ${t.deliveries.map(d => `<tr><td><b>${esc(d.doc_no)}</b></td><td>${esc(d.surat_jalan_no)}</td><td>${d.do_date}</td><td>${badge(d.status)}</td></tr>`).join('') || '<tr><td colspan=4 class=mut>none yet</td></tr>'}</table>
   <button class="btn gray" onclick="go('projects')" style="margin-top:14px">← Back</button>`;
 };
 window.payBill = async (pid, bid) => {
@@ -344,7 +344,7 @@ views.profit = async () => {
   <table><tr><th>Project</th><th class="money">Revenue</th><th class="money">Cost</th>
   <th class="money">Gross Profit</th><th class="money">Margin %</th><th>Status</th></tr>
   ${list.map(r => { const neg = r.gross_profit < 0;
-    return `<tr><td><b>${r.project_code}</b> ${r.name}</td><td class="money">${fmt(r.revenue)}</td>
+    return `<tr><td><b>${esc(r.project_code)}</b> ${esc(r.name)}</td><td class="money">${fmt(r.revenue)}</td>
     <td class="money" style="color:${neg?'#8a1c1c':'#1b3691'}">${fmt(r.gross_profit)}</td>
     <td class="money">${r.gross_margin_pct}%</td><td>${badge(r.status)}</td></tr>`; }).join('')}</table>`;
 };
@@ -358,12 +358,12 @@ views.delivery = async () => {
   <div class="formbox"><h2 style="margin-top:0">New Delivery from posted SO</h2>
    <div class="row">
     <div style="flex:2"><label>Sales Order</label><select id="do-so">
-      ${postedSOs.map(s => `<option value="${s.id}" data-cust="${s.customer_id}" data-wh="${s.warehouse_id}">${s.doc_no}</option>`).join('')}
+      ${postedSOs.map(s => `<option value="${s.id}" data-cust="${s.customer_id}" data-wh="${s.warehouse_id}">${esc(s.doc_no)}</option>`).join('')}
     </select></div>
     <div style="align-self:flex-end"><button class="btn" onclick="mkDO()">Create DO + SJ</button></div>
    </div></div>
   <table><tr><th>DO No</th><th>Surat Jalan</th><th>SO</th><th>Date</th><th>Status</th></tr>
-  ${list.map(d => `<tr><td><b>${d.doc_no}</b></td><td>${d.surat_jalan_no}</td><td>${d.so_no||''}</td>
+  ${list.map(d => `<tr><td><b>${esc(d.doc_no)}</b></td><td>${esc(d.surat_jalan_no)}</td><td>${esc(d.so_no||'')}</td>
    <td>${d.do_date}</td><td>${badge(d.status)}</td></tr>`).join('')}</table>`;
 };
 window.mkDO = async () => {
@@ -387,15 +387,15 @@ views.warranty = async () => {
   <div class="sub">§29-§33 · warranty born from deliveries · service tracks status until customer pickup</div>
   <h2>Warranty Certificates</h2>
   <table><tr><th>No</th><th>Customer</th><th>Product</th><th>Serial</th><th>Start</th><th>End</th><th>Status</th></tr>
-  ${warr.map(w => `<tr><td><b>${w.warranty_no}</b></td><td>${w.customer_name}</td><td>${w.product_name}</td>
-   <td class="mut">${w.serial||'—'}</td><td>${w.warranty_start}</td><td>${w.warranty_end}</td><td>${badge(w.status)}</td></tr>`).join('')}</table>
+  ${warr.map(w => `<tr><td><b>${esc(w.warranty_no)}</b></td><td>${esc(w.customer_name)}</td><td>${esc(w.product_name)}</td>
+   <td class="mut">${esc(w.serial||'—')}</td><td>${w.warranty_start}</td><td>${w.warranty_end}</td><td>${badge(w.status)}</td></tr>`).join('')}</table>
   <h2>Service Orders</h2>
   <table><tr><th>No</th><th>Customer</th><th>Product</th><th>Complaint</th><th>Status</th></tr>
-  ${serv.map(s => `<tr><td><b>${s.doc_no}</b></td><td>${s.customer_name}</td><td>${s.product_name}</td>
-   <td>${(s.complaint||'').slice(0,40)}</td><td>${badge(s.status)}</td></tr>`).join('')}</table>
+  ${serv.map(s => `<tr><td><b>${esc(s.doc_no)}</b></td><td>${esc(s.customer_name)}</td><td>${esc(s.product_name)}</td>
+   <td>${esc((s.complaint||'').slice(0,40))}</td><td>${badge(s.status)}</td></tr>`).join('')}</table>
   <h2>Field Work Orders (§33)</h2>
   <table><tr><th>No</th><th>Project</th><th>Location</th><th>Date</th><th>Status</th></tr>
-  ${wos.map(w => `<tr><td><b>${w.doc_no}</b></td><td>${w.project_code||''}</td><td>${w.location||''}</td>
+  ${wos.map(w => `<tr><td><b>${esc(w.doc_no)}</b></td><td>${esc(w.project_code||'')}</td><td>${esc(w.location||'')}</td>
    <td>${w.scheduled_date||''}</td><td>${badge(w.status)}</td></tr>`).join('')}</table>`;
 };
 views.users = async () => {
@@ -420,16 +420,16 @@ views.users = async () => {
     </form>
   </div>
   <table><tr><th>ID</th><th>Username</th><th>Nama</th><th>Role</th><th>Status</th><th>Actions</th></tr>
-  ${list.map(u => `<tr><td>${u.id}</td><td><b>${u.username}</b>${u.username === me.user ? ' <span class="mut">(you)</span>' : ''}</td>
-    <td>${u.full_name}</td>
+  ${list.map(u => `<tr><td>${u.id}</td><td><b>${esc(u.username)}</b>${u.username === me.user ? ' <span class="mut">(you)</span>' : ''}</td>
+    <td>${esc(u.full_name)}</td>
     <td><select ${u.username === me.user ? 'disabled' : ''} onchange="editUser(${u.id}, {role:this.value})">${roleOpts(u.role)}</select></td>
     <td>${u.is_active ? badge('ACTIVE') : badge('INACTIVE')}</td>
     <td>
-      <button class="btn sm gray" onclick="resetPw(${u.id}, '${u.username}')">Reset PW</button>
+      <button class="btn sm gray" onclick="resetPw(${u.id}, '${esc(u.username)}')">Reset PW</button>
       ${u.username === me.user ? '' : (u.is_active
         ? `<button class="btn sm warn" onclick="editUser(${u.id}, {is_active:false})">Disable</button>`
         : `<button class="btn sm" onclick="editUser(${u.id}, {is_active:true})">Enable</button>`)}
-      ${u.username === me.user ? '' : `<button class="btn sm warn" onclick="delUser(${u.id}, '${u.username}')">Delete</button>`}
+      ${u.username === me.user ? '' : `<button class="btn sm warn" onclick="delUser(${u.id}, '${esc(u.username)}')">Delete</button>`}
     </td></tr>`).join('')}</table>
   <h2>Ganti Password Saya</h2>
   <div class="formbox"><form onsubmit="return changeMyPw(event)">
@@ -486,7 +486,7 @@ views.audit = async () => {
   main.innerHTML = `<h1>Audit Trail (§12)</h1>
   <div class="sub">Every change: user · date · module · doc · action · old → new</div>
   <table><tr><th>When</th><th>Module</th><th>Doc</th><th>Action</th></tr>
-  ${rowsL.map(a => `<tr><td class="mut">${a.at}</td><td>${a.module}</td><td>${a.doc_no||''}</td><td><b>${a.action}</b></td></tr>`).join('')}</table>`;
+  ${rowsL.map(a => `<tr><td class="mut">${a.at}</td><td>${esc(a.module)}</td><td>${esc(a.doc_no||'')}</td><td><b>${esc(a.action)}</b></td></tr>`).join('')}</table>`;
 };
 
 // ---------------- Item Detail (§18) + EAN + photo ----------------
@@ -498,14 +498,14 @@ views.item = async id => {
   <div style="display:flex;gap:18px;align-items:flex-start;margin-top:14px">
     <div style="width:170px;flex-shrink:0">
       ${p.photo_url
-        ? `<img src="${p.photo_url}" alt="${p.code}" style="width:170px;border:1px solid var(--line);border-radius:10px;background:var(--card)">`
+        ? `<img src="${esc(p.photo_url)}" alt="${esc(p.code)}" style="width:170px;border:1px solid var(--line);border-radius:10px;background:var(--card)">`
         : `<div style="width:170px;height:130px;border:1px dashed var(--line);border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--mut);font-size:12px;background:var(--card)">no photo</div>`}
       <input type="file" id="photo-file" accept="image/png,image/jpeg,image/gif,image/webp" style="display:none" onchange="upPhoto(${id})">
       <button class="btn gray sm" style="width:100%;margin-top:6px" onclick="document.getElementById('photo-file').click()">📷 ${p.photo_url ? 'Ganti Foto' : 'Upload Foto'}</button>
     </div>
     <div style="flex:1">
-      <h1 style="margin-bottom:2px">${p.code} — ${p.name}</h1>
-      <div class="sub">${p.brand||''} ${p.model||''} · ${p.type} · ${p.category||'—'} · satuan ${p.uom} · serial: ${p.serial_policy} · garansi ${p.warranty_months} bln</div>
+      <h1 style="margin-bottom:2px">${esc(p.code)} — ${esc(p.name)}</h1>
+      <div class="sub">${esc(p.brand||'')} ${esc(p.model||'')} · ${p.type} · ${esc(p.category||'—')} · satuan ${esc(p.uom)} · serial: ${p.serial_policy} · garansi ${p.warranty_months} bln</div>
       <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(160px,1fr));margin-top:10px">
         <div class="kpi"><div class="lbl">Total Physical</div><div class="val">${d.totals.physical}</div></div>
         <div class="kpi"><div class="lbl">Reserved</div><div class="val">${d.totals.reserved}</div></div>
@@ -515,7 +515,7 @@ views.item = async id => {
       <div class="formbox" style="margin-top:14px">
         <b>EAN / Barcode</b>
         <div class="row" style="margin-top:8px;align-items:flex-end">
-          <div style="flex:2"><input id="ean-input" value="${p.barcode||''}" placeholder="scan / ketik EAN lalu Enter"></div>
+          <div style="flex:2"><input id="ean-input" value="${esc(p.barcode||'')}" placeholder="scan / ketik EAN lalu Enter"></div>
           <div><button class="btn sm" onclick="saveEan(${id})">Simpan EAN</button></div>
         </div>
         <div class="mut" style="font-size:11px">EAN dipakai untuk lookup cepat: <code>/api/products/lookup/&lt;EAN&gt;</code> — siap untuk scanner.</div>
@@ -525,17 +525,17 @@ views.item = async id => {
   <h2>Stok per Gudang</h2>
   <table><tr><th>Warehouse</th><th class="money">Physical</th><th class="money">Reserved</th>
   <th class="money">Available</th><th class="money">Avg Cost</th><th class="money">Value</th></tr>
-  ${d.by_warehouse.map(r => `<tr><td>${r.wh_name}</td><td class="money">${r.physical}</td><td class="money">${r.reserved}</td>
+  ${d.by_warehouse.map(r => `<tr><td>${esc(r.wh_name)}</td><td class="money">${r.physical}</td><td class="money">${r.reserved}</td>
     <td class="money"><b class="${r.available<=0?'low':'ok'}">${r.available}</b></td>
     <td class="money">${fmt(r.avg_cost)}</td><td class="money">${fmt(r.stock_value)}</td></tr>`).join('') || '<tr><td colspan=6 class=mut>belum ada stok</td></tr>'}</table>
   <h2>Serial Numbers</h2>
   <table><tr><th>Serial</th><th>Status</th><th>Warehouse</th><th>Warranty End</th></tr>
-  ${d.serials.slice(0,30).map(s => `<tr><td><b>${s.serial}</b></td><td>${badge(s.status)}</td><td>${s.wh_name||'—'}</td>
+  ${d.serials.slice(0,30).map(s => `<tr><td><b>${esc(s.serial)}</b></td><td>${badge(s.status)}</td><td>${esc(s.wh_name||'—')}</td>
     <td class="mut">${s.warranty_end||'—'}</td></tr>`).join('') || '<tr><td colspan=4 class=mut>no serials</td></tr>'}</table>
   ${d.serials.length > 30 ? `<div class="mut" style="font-size:11px">… ${d.serials.length-30} more</div>` : ''}
   <h2>Mutasi Terakhir</h2>
   <table><tr><th>When</th><th>Type</th><th>Warehouse</th><th class="money">ΔQty</th><th>Ref</th></tr>
-  ${d.movements.map(m => `<tr><td class="mut">${m.moved_at}</td><td>${m.movement_type}</td><td>${m.wh_name}</td>
+  ${d.movements.map(m => `<tr><td class="mut">${m.moved_at}</td><td>${m.movement_type}</td><td>${esc(m.wh_name)}</td>
     <td class="money ${m.qty_delta<0?'low':'ok'}">${m.qty_delta}</td><td class="mut">${m.ref_no||''}</td></tr>`).join('') || '<tr><td colspan=5 class=mut>belum ada mutasi</td></tr>'}</table>`;
 };
 window.saveEan = async id => {
@@ -582,7 +582,7 @@ views.transfer = async () => {
   </div>
   <h2>Riwayat Transfer</h2>
   <table><tr><th>Doc No</th><th>Tanggal</th><th>Dari</th><th>Ke</th><th>Status</th><th>Actions</th></tr>
-  ${list.map(t => `<tr><td><b>${t.doc_no}</b></td><td>${t.transfer_date}</td><td>${t.from_name}</td><td>${t.to_name}</td>
+  ${list.map(t => `<tr><td><b>${esc(t.doc_no)}</b></td><td>${t.transfer_date}</td><td>${esc(t.from_name)}</td><td>${esc(t.to_name)}</td>
     <td>${badge(t.status)}</td><td>${wfBtns('stock_transfers', t)}</td></tr>`).join('') || '<tr><td colspan=6 class=mut>belum ada transfer</td></tr>'}</table>`;
   window.trfLines = [];
   addTrfLine();
@@ -592,7 +592,7 @@ window.addTrfLine = () => {
   window.trfLines.push({ pid: PRODUCTS[0] ? PRODUCTS[0].id : null, qty: 1, serials: '' });
   $('#trf-lines').insertAdjacentHTML('beforeend', `
     <tr><td style="width:50%"><select onchange="trfLines[${i}].pid=+this.value">
-      ${PRODUCTS.map(p => `<option value="${p.id}">${p.code} — ${p.name}</option>`).join('')}</select></td>
+      ${PRODUCTS.map(p => `<option value="${p.id}">${esc(p.code)} — ${esc(p.name)}</option>`).join('')}</select></td>
     <td><input type="number" min="1" value="1" oninput="trfLines[${i}].qty=+this.value"></td>
     <td><input placeholder="serials (koma)" oninput="trfLines[${i}].serials=this.value"></td></tr>`);
   if (i === 0) $('#trf-lines').insertAdjacentHTML('beforebegin',
@@ -770,7 +770,7 @@ window.go = async v => {
     const s = await api('/session');
     const h = document.createElement('div');
     h.id = 'whoami';
-    h.innerHTML = `Signed in as <b>${s.user}</b> <span class="mut">· ${s.role}</span><button id="logout" onclick="location.href='/logout'">Log out</button>`;
+    h.innerHTML = `Signed in as <b>${esc(s.user)}</b> <span class="mut">· ${esc(s.role)}</span><button id="logout" onclick="location.href='/logout'">Log out</button>`;
     main.before(h);
     if (s.role === 'ADMIN') {
       const usersLink = document.querySelector('nav a[data-v="users"]');
@@ -793,8 +793,8 @@ views.warehouses = async () => {
     const qty = items.reduce((s, r) => s + r.physical, 0);
     const val = items.reduce((s, r) => s + r.stock_value, 0);
     return `<div class="kpi" style="cursor:pointer" onclick="document.getElementById('wh-${w.id}').scrollIntoView({behavior:'smooth'})">
-      <div class="lbl">${w.code} · ${typeBadge(w.type)}</div>
-      <div class="val" style="font-size:15px">${w.name}</div>
+      <div class="lbl">${esc(w.code)} · ${typeBadge(w.type)}</div>
+      <div class="val" style="font-size:15px">${esc(w.name)}</div>
       <div class="mut" style="font-size:11.5px;margin-top:5px">${items.length} barang · ${qty} pcs · ${fmt(val)}</div>
     </div>`;
   }).join('') + `</div>
@@ -815,11 +815,11 @@ views.warehouses = async () => {
   </div>` +
   whs.map(w => {
     const items = byWh[w.code] || [];
-    return `<h2 id="wh-${w.id}">🏬 ${w.name} <span class="mut" style="text-transform:none;letter-spacing:0">(${w.code} · ${w.type}${w.address ? ' · ' + w.address : ''})</span></h2>
+    return `<h2 id="wh-${w.id}">🏬 ${esc(w.name)} <span class="mut" style="text-transform:none;letter-spacing:0">(${esc(w.code)} · ${w.type}${w.address ? ' · ' + esc(w.address) : ''})</span></h2>
     <table><tr><th>Code</th><th>Product</th><th>EAN</th><th class="money">Physical</th><th class="money">Reserved</th>
     <th class="money">Available</th><th class="money">Value</th></tr>
-    ${items.map(r => `<tr><td><a href="#" onclick="go('item-${r.product_id}');return false" style="color:inherit"><b>${r.code}</b></a></td>
-      <td>${r.name} <span class="mut">${r.brand||''}</span></td><td class="mut">${r.barcode||'—'}</td>
+    ${items.map(r => `<tr><td><a href="#" onclick="go('item-${r.product_id}');return false" style="color:inherit"><b>${esc(r.code)}</b></a></td>
+      <td>${esc(r.name)} <span class="mut">${esc(r.brand||'')}</span></td><td class="mut">${esc(r.barcode||'—')}</td>
       <td class="money">${r.physical}</td><td class="money">${r.reserved}</td>
       <td class="money"><b class="${r.available<=0?'low':'ok'}">${r.available}</b></td>
       <td class="money">${fmt(r.stock_value)}</td></tr>`).join('') ||
