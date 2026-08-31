@@ -64,6 +64,8 @@ padding:10px 16px;border-radius:9px;display:none;font-size:13px;z-index:9;box-sh
 .money{text-align:right;font-variant-numeric:tabular-nums}
 #pform{display:none;margin:12px 0 16px}
 #pform.open{display:block}
+#leadform{display:none;margin:12px 0 16px}
+#leadform.open{display:block}
 #whform{display:none;margin-top:12px}
 #whform.open{display:block}
 .low{color:#8a1c1c;font-style:italic}.ok{color:var(--hi)}
@@ -127,6 +129,17 @@ table.acts td{padding:7px 10px}
 .lisa-inp button{background:linear-gradient(135deg,#1b3691,#2f56c4);color:#fff;border:none;border-radius:7px;
   width:40px;cursor:pointer;font-size:15px}
 .lisa-inp button:hover{background:linear-gradient(135deg,#0e1a45,#1b3691)}
+/* ---- CRM pipeline ---- */
+.pipeline{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;align-items:start}
+.pcol{background:#eef1f9;border:1px solid var(--line);border-radius:10px;padding:8px;min-height:60px}
+.phead{font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--hi);text-transform:uppercase;margin-bottom:8px}
+.pempty{text-align:center;font-size:11px;padding:8px 0}
+.leadcard{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:9px;margin-bottom:8px;font-size:12.5px}
+.leadcard .ltop{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.leadcard .ltop b{font-size:12.5px}
+.leadcard .lpic{font-size:11px;margin:2px 0}
+.leadcard .lacts{display:flex;flex-wrap:wrap;gap:4px;margin-top:7px}
+.leadcard .lacts .btn{margin:0;padding:3px 7px;font-size:10px}
 </style>
 </head>
 <body>
@@ -140,6 +153,7 @@ table.acts td{padding:7px 10px}
  <a data-v="newdoc">➕ New Document</a>
  <a data-v="projects">🏗️ Projects</a>
  <a data-v="delivery">🚚 Delivery / Surat Jalan</a>
+ <a data-v="crm">🤝 CRM</a>
  <a data-v="warranty">🛡️ Warranty &amp; Service</a>
  <a data-v="profit">💰 Profitability</a>
  <a data-v="audit">🔐 Audit Trail</a>

@@ -223,6 +223,25 @@ CREATE TABLE IF NOT EXISTS attachments (
   att_type TEXT NOT NULL, file_name TEXT NOT NULL, mime TEXT, storage_url TEXT NOT NULL,
   uploaded_by INTEGER, uploaded_at TEXT DEFAULT (datetime('now')), description TEXT);
 CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT);
+-- CRM: leads pipeline (pre-customer prospects) + follow-up/activity log (leads AND customers)
+CREATE TABLE IF NOT EXISTS crm_leads (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, lead_no TEXT UNIQUE, company TEXT NOT NULL,
+  pic_name TEXT, phone TEXT, email TEXT, address TEXT,
+  source TEXT, stage TEXT NOT NULL DEFAULT 'NEW'
+    CHECK(stage IN ('NEW','CONTACTED','QUOTED','NEGOTIATION','WON','LOST')),
+  est_value REAL DEFAULT 0, interest TEXT, owner_id INTEGER REFERENCES users(id),
+  customer_id INTEGER REFERENCES business_partners(id),
+  next_followup TEXT, lost_reason TEXT, note TEXT,
+  created_by INTEGER, created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')));
+CREATE TABLE IF NOT EXISTS crm_activities (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  lead_id INTEGER REFERENCES crm_leads(id) ON DELETE CASCADE,
+  customer_id INTEGER REFERENCES business_partners(id),
+  activity_type TEXT NOT NULL CHECK(activity_type IN ('CALL','VISIT','WHATSAPP','EMAIL','MEETING','OTHER')),
+  summary TEXT NOT NULL, result TEXT,
+  due_date TEXT, done_at TEXT DEFAULT (datetime('now')),
+  done_by INTEGER REFERENCES users(id),
+  CHECK((lead_id IS NOT NULL) OR (customer_id IS NOT NULL)));
 `);
 
 const PPN_RATE = 0.11; // §9

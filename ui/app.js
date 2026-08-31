@@ -108,6 +108,12 @@ views.dash = async () => {
       ${kpiCard('Open Work Orders', s.open_work_orders, zero(s.open_work_orders), 'warranty')}
       ${kpiCard('Active Projects', s.active_projects, '', 'projects')}
     </div></div>
+  </div>
+  <h2>CRM Pipeline</h2><div class="grid">
+    ${kpiCard('Open Leads', d.crm.open_leads, '', 'crm', 'Pipeline value ' + fmt(d.crm.open_value))}
+    ${kpiCard('Won', d.crm.won, '', 'crm')}
+    ${kpiCard('Lost', d.crm.lost, 'mut0', 'crm')}
+    ${kpiCard('Follow-ups due ≤7d', d.crm.followups_due, d.crm.followups_due > 0 ? 'amber' : 'mut0', 'crm')}
   </div>`;
 };
 
@@ -608,14 +614,153 @@ window.mkTrf = async () => {
   } catch (e) { toast(e.message, true); }
 };
 
-// ---------------- router ----------------
+// ---------------- CRM (leads / follow-ups) ----------------
+const CRM_STAGES = ['NEW', 'CONTACTED', 'QUOTED', 'NEGOTIATION', 'WON', 'LOST'];
+views.crm = async () => {
+  const [leads, fus] = await Promise.all([api('/crm/leads'), api('/crm/followups?days=7')]);
+  const open = leads.filter(l => !['WON', 'LOST'].includes(l.stage));
+  const closed = leads.filter(l => ['WON', 'LOST'].includes(l.stage));
+  const leadCard = l => `<div class="leadcard">
+    <div class="ltop"><b>${esc(l.company)}</b><span class="mut">${rp2(l.est_value)}</span></div>
+    <div class="mut lpic">${esc(l.pic_name || '—')}${l.phone ? ' · ' + esc(l.phone) : ''}</div>
+    ${l.interest ? `<div class="mut" style="font-size:11px">🎯 ${esc(l.interest)}</div>` : ''}
+    ${l.next_followup ? `<div class="mut" style="font-size:11px">⏰ follow-up: ${esc(l.next_followup)}</div>` : ''}
+    <div class="lacts">
+      ${!['WON', 'LOST'].includes(l.stage) ? CRM_STAGES.slice(0, 4).filter(s => s !== l.stage)
+        .map(s => `<button class="btn sm gray" onclick="crmStage(${l.id},'${s}')">${s.charAt(0) + s.slice(1).toLowerCase()}</button>`).join('') : ''}
+      ${l.stage !== 'WON' ? `<button class="btn sm" onclick="crmConvert(${l.id})">🏆 Won→Customer</button>` : ''}
+      ${l.stage !== 'LOST' ? `<button class="btn sm warn" onclick="crmLost(${l.id})">Lost</button>` : ''}
+      ${l.customer_id ? `<button class="btn sm gray" onclick="go('crm-${l.customer_id}')">360</button>` : ''}
+    </div></div>`;
+  main.innerHTML = `
+  <h1>CRM — Leads &amp; Follow-ups</h1>
+  <div class="sub">Pipeline prospek · catat aktivitas · convert WON → customer master · due follow-ups 7 hari</div>
+  <button class="btn" onclick="document.getElementById('leadform').classList.toggle('open')">＋ Tambah Lead</button>
+  <div class="formbox" id="leadform">
+    <b>Lead Baru</b>
+    <form onsubmit="return crmAddLead(event)">
+      <div class="row">
+        <div style="flex:2"><label>Perusahaan *</label><input name="company" required></div>
+        <div style="flex:1"><label>PIC</label><input name="pic_name"></div>
+        <div style="flex:1"><label>Telepon</label><input name="phone"></div>
+        <div style="flex:1"><label>Email</label><input name="email" type="email"></div>
+      </div>
+      <div class="row">
+        <div style="flex:1"><label>Source</label><input name="source" placeholder="IG / referral / pameran"></div>
+        <div style="flex:1.4"><label>Minat</label><input name="interest" placeholder="sound system untuk club"></div>
+        <div style="flex:1"><label>Est. Value (Rp)</label><input name="est_value" type="number" min="0" value="0"></div>
+        <div style="flex:1"><label>Next Follow-up</label><input name="next_followup" type="date"></div>
+        <div style="display:flex;align-items:flex-end"><button class="btn" type="submit">Simpan</button></div>
+      </div>
+    </form>
+  </div>
+  <h2>⏰ Follow-ups Due (7 hari)</h2>
+  ${fus.length ? `<table><tr><th>Target</th><th>Type</th><th>Summary</th><th>Due</th><th>By</th><th></th></tr>
+    ${fus.map(f => `<tr><td><b>${esc(f.target || '—')}</b></td><td>${f.activity_type}</td>
+      <td>${esc(f.summary)}</td><td class="mut">${f.due_date}</td><td class="mut">${esc(f.done_by_name || '')}</td>
+      <td><button class="btn sm" onclick="crmDone(${f.id})">✓ Done</button></td></tr>`).join('')}</table>`
+    : '<div class="mut">Tidak ada follow-up jatuh tempo. ✅</div>'}
+  <h2>Pipeline — Open (${open.length})</h2>
+  <div class="pipeline">${CRM_STAGES.filter(s => !['WON', 'LOST'].includes(s)).map(s => {
+    const items = open.filter(l => l.stage === s);
+    return `<div class="pcol"><div class="phead">${s} <span class="mut">${items.length}</span></div>
+      ${items.map(leadCard).join('') || '<div class="mut pempty">—</div>'}</div>`;
+  }).join('')}</div>
+  <h2>Won / Lost (${closed.length})</h2>
+  <table><tr><th>Company</th><th>Stage</th><th>Est. Value</th><th>Customer</th><th>Lost reason</th></tr>
+  ${closed.map(l => `<tr><td><b>${esc(l.company)}</b></td><td>${badge(l.stage)}</td>
+    <td class="money">${rp2(l.est_value)}</td>
+    <td>${l.customer_id ? `<a href="#" onclick="go('crm-${l.customer_id}');return false" style="color:inherit">${esc(l.customer_name || '#' + l.customer_id)}</a>` : '—'}</td>
+    <td class="mut">${esc(l.lost_reason || '')}</td></tr>`).join('') || '<tr><td colspan=5 class=mut>belum ada</td></tr>'}</table>`;
+};
+const rp2 = n => 'Rp ' + Number(n || 0).toLocaleString('id-ID', { maximumFractionDigits: 0 });
+window.crmAddLead = async ev => {
+  ev.preventDefault();
+  const b = Object.fromEntries(new FormData(ev.target).entries());
+  b.est_value = Number(b.est_value || 0);
+  try { await api('/crm/leads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) });
+    toast('Lead tersimpan'); views.crm(); } catch (e) { toast(e.message, true); }
+  return false;
+};
+window.crmStage = async (id, stage) => {
+  try { await api('/crm/leads/' + id, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ stage }) }); views.crm(); } catch (e) { toast(e.message, true); }
+};
+window.crmConvert = async id => {
+  try { const r = await api(`/crm/leads/${id}/convert`, { method: 'POST' });
+    toast('Lead → customer #' + r.customer_id); go('crm-' + r.customer_id); }
+  catch (e) { toast(e.message, true); }
+};
+window.crmLost = async id => {
+  const reason = prompt('Alasan lost (opsional):');
+  if (reason === null) return;
+  try { await api('/crm/leads/' + id, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ stage: 'LOST', lost_reason: reason }) }); views.crm(); }
+  catch (e) { toast(e.message, true); }
+};
+window.crmDone = async id => {
+  try { await api(`/crm/activities/${id}/complete`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}) }); toast('Follow-up selesai'); views.crm(); } catch (e) { toast(e.message, true); }
+};
+// ---------------- Customer 360 ----------------
+views.crm360 = async id => {
+  const d = await api('/crm/360/' + id);
+  const c = d.customer;
+  const tbl = (title, rowsL, cols) => `<h2>${title}</h2>
+    <table><tr>${cols.map(x => `<th>${x[0]}</th>`).join('')}</tr>
+    ${rowsL.map(r => `<tr>${cols.map(x => `<td>${x[1](r)}</td>`).join('')}</tr>`).join('')
+      || `<tr><td colspan="${cols.length}" class="mut">none</td></tr>`}</table>`;
+  main.innerHTML = `
+  <button class="btn gray sm" onclick="go('crm')">← CRM</button>
+  <h1 style="margin-top:10px">${esc(c.name)}</h1>
+  <div class="sub">${c.kind} · PIC ${esc(c.pic || '—')}${c.phone ? ' · ☎ ' + esc(c.phone) : ''}${c.email ? ' · ✉ ' + esc(c.email) : ''}${c.city ? ' · ' + esc(c.city) : ''} · payment term ${c.payment_term_days}d · credit limit ${rp2(c.credit_limit)}</div>
+  <div class="grid" style="grid-template-columns:repeat(3,1fr)">
+    ${kpiCard('Posted Orders', d.totals.orders.n, '', null, rp2(d.totals.orders.v))}
+    ${kpiCard('Outstanding (SO)', rp2(d.totals.outstanding.v), d.totals.outstanding.v > 0 ? 'amber' : '')}
+    ${kpiCard('Projects', d.projects.length)}
+  </div>
+  ${tbl('Quotations', d.quotations, [['Doc', r => `<b>${esc(r.doc_no)}</b>`], ['Date', r => r.quote_date], ['Total', r => rp2(r.grand_total)], ['Status', r => badge(r.status)]])}
+  ${tbl('Sales Orders', d.sales_orders, [['Doc', r => `<b>${esc(r.doc_no)}</b>`], ['Date', r => r.so_date], ['Type', r => r.sales_type], ['Total', r => rp2(r.grand_total)], ['Paid', r => rp2(r.paid_amount)], ['Status', r => badge(r.status)]])}
+  ${tbl('Projects', d.projects, [['Code', r => `<b>${esc(r.project_code)}</b>`], ['Name', r => esc(r.name)], ['Contract', r => rp2(r.contract_value)], ['Status', r => badge(r.status)]])}
+  ${tbl('Warranties', d.warranties, [['No', r => `<b>${esc(r.warranty_no)}</b>`], ['Start', r => r.warranty_start], ['End', r => r.warranty_end], ['Status', r => badge(r.status)]])}
+  ${tbl('Service Orders', d.service_orders, [['Doc', r => `<b>${esc(r.doc_no)}</b>`], ['Received', r => r.received_at], ['Complaint', r => esc((r.complaint || '').slice(0, 40))], ['Status', r => badge(r.status)]])}
+  <h2>Activities / Follow-ups</h2>
+  <table><tr><th>When</th><th>Type</th><th>Summary</th><th>Result</th><th>By</th></tr>
+  ${d.activities.map(a => `<tr><td class="mut">${a.done_at || ''}</td><td>${a.activity_type}</td>
+    <td>${esc(a.summary)}</td><td class="mut">${esc(a.result || '')}</td><td class="mut">${esc(a.done_by_name || '')}</td></tr>`).join('')
+    || '<tr><td colspan=5 class="mut">belum ada aktivitas</td></tr>'}</table>
+  <div class="formbox" style="margin-top:14px"><b>Catat Aktivitas Baru</b>
+    <form onsubmit="return crmAddAct(event, ${c.id})">
+      <div class="row">
+        <div style="flex:1"><label>Type</label><select name="activity_type">
+          <option>CALL</option><option>VISIT</option><option>WHATSAPP</option><option>EMAIL</option><option>MEETING</option><option>OTHER</option></select></div>
+        <div style="flex:2"><label>Summary *</label><input name="summary" required placeholder="telpon PIC — tanya timeline pengadaan"></div>
+        <div style="flex:1"><label>Follow-up due</label><input name="due_date" type="date"></div>
+        <div style="display:flex;align-items:flex-end"><button class="btn" type="submit">Simpan</button></div>
+      </div>
+    </form></div>`;
+};
+window.crmAddAct = async (ev, customerId) => {
+  ev.preventDefault();
+  const b = Object.fromEntries(new FormData(ev.target).entries());
+  b.customer_id = customerId;
+  try { await api('/crm/activities', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(b) }); toast('Aktivitas tercatat'); views.crm360(customerId); }
+  catch (e) { toast(e.message, true); }
+  return false;
+};
+// __CRM_VIEWS__
+
+
 let current = 'dash';
 window.go = async v => {
   current = v;
-  document.querySelectorAll('nav a').forEach(a => a.classList.toggle('on', a.dataset.v === v));
+  document.querySelectorAll('nav a').forEach(a => a.classList.toggle('on', a.dataset.v === v || (a.dataset.v === 'crm' && v.startsWith('crm-'))));
   try {
     const m = v.match(/^item-(\d+)$/);
     if (m) return await views.item(Number(m[1]));
+    const cm = v.match(/^crm-(\d+)$/);
+    if (cm) return await views.crm360(Number(cm[1]));
     await views[v]();
   } catch (e) { main.innerHTML = `<h1>Error</h1><pre>${e.message}</pre>`; }
 };

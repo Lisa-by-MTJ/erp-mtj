@@ -619,6 +619,7 @@ route('GET', '/api/dashboard2', (c) => {
     top_customers: ext.topCustomers(period),
     sales_period: ext.salesByPeriod(period),
     billing_aging: ext.billingAging(),
+    crm: crmMod.summary(),
     period,
   };
   DASH2_CACHE = { at: nowMs, data, period };
@@ -636,6 +637,42 @@ route('POST', '/api/lisa', async (c) => {
   const body = await readBody(c.req);
   const out = await lisa.reply(String(body.message || ''));
   return ok(c.res, out);
+});
+
+// ================= CRM (leads / follow-ups / 360) =================
+const crmMod = require('./crm.js');
+route('GET', '/api/crm/summary', (c) => ok(c.res, crmMod.summary()));
+route('GET', '/api/crm/leads', (c) => ok(c.res, crmMod.listLeads(c.url.searchParams.get('stage'))));
+route('POST', '/api/crm/leads', async (c) => {
+  if (!requirePerm(c, 'create')) return;
+  return ok(c.res, crmMod.createLead(c.user, await readBody(c.req)));
+});
+route('POST', '/api/crm/leads/:id', async (c) => {
+  if (!requirePerm(c, 'create')) return;
+  return ok(c.res, crmMod.updateLead(c.user, Number(c.params.id), await readBody(c.req)));
+});
+route('POST', '/api/crm/leads/:id/convert', async (c) => {
+  if (!requirePerm(c, 'workflow')) return;
+  return ok(c.res, crmMod.convertLead(c.user, Number(c.params.id), await readBody(c.req)));
+});
+route('GET', '/api/crm/followups', (c) => ok(c.res, crmMod.followupsDue(Number(c.url.searchParams.get('days')) || 7)));
+route('GET', '/api/crm/activities', (c) => {
+  const lead = c.url.searchParams.get('lead'), cust = c.url.searchParams.get('customer');
+  return ok(c.res, crmMod.listActivities(lead ? Number(lead) : null, cust ? Number(cust) : null));
+});
+route('POST', '/api/crm/activities', async (c) => {
+  if (!requirePerm(c, 'create')) return;
+  return ok(c.res, crmMod.addActivity(c.user, await readBody(c.req)));
+});
+route('POST', '/api/crm/activities/:id/complete', async (c) => {
+  if (!requirePerm(c, 'workflow')) return;
+  const b = await readBody(c.req);
+  return ok(c.res, crmMod.completeActivity(c.user, Number(c.params.id), b.result));
+});
+route('GET', '/api/crm/360/:id', (c) => {
+  const d = crmMod.customer360(Number(c.params.id));
+  if (!d) return bad(c.res, 404, 'Customer not found');
+  return ok(c.res, d);
 });
 route('GET', '/api/profitability', (c) => {
   const list = dash.profitability().map(r => ({ ...r,

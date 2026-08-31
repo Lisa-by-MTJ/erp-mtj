@@ -3,6 +3,7 @@
 'use strict';
 const { db } = require('./db.js');
 const ext = require('./dashboard_ext.js');
+const crm = require('./crm.js');
 
 const CF_TOKEN = process.env.MTJ_CF_AI_TOKEN || '';
 const CF_ACCOUNT = process.env.MTJ_CF_AI_ACCOUNT || '';
@@ -65,6 +66,9 @@ function route(q) {
   if (has(m, 'gudang', 'warehouse')) return { kind: 'warehouses' };
   if (has(m, 'low stock', 'reorder', 'restock', 'hampir habis')) return { kind: 'lowstock' };
   if (has(m, 'aktivitas', 'activity', 'terakhir', 'recent', 'audit')) return { kind: 'activity' };
+  if (has(m, 'follow up', 'followup', 'follow-up', 'tindak lanjut', 'ingatkan')) return { kind: 'followups' };
+  if (has(m, 'lead', 'prospek', 'prospect', 'pipeline')) return { kind: 'leads' };
+  if (has(m, 'pelanggan', 'customer', 'kontak', 'client')) return { kind: 'customers' };
   if (has(m, 'halo', 'hai', 'hi', 'hello', 'pagi', 'siang', 'sore')) return { kind: 'greet' };
   if (has(m, 'bisa apa', 'help', 'bantuan', 'cmd')) return { kind: 'help' };
   // bare product mention with no intent keyword -> treat as stock ask
@@ -86,6 +90,9 @@ function answer(q) {
     '• **nilai stok** — total nilai inventory',
     '• **low stock / reorder** — barang di bawah reorder point',
     '• **gudang** — daftar gudang aktif',
+    '• **lead / prospek / pipeline** — ringkasan pipeline CRM',
+    '• **follow-up / tindak lanjut** — yang jatuh tempo ≤7 hari',
+    '• **customer / pelanggan** — daftar customer',
     '• **aktivitas terakhir** — audit trail terbaru'].join('\n') };
   if (kind === 'stock') {
     if (!p) return { text: 'Sebutkan nama/kode barangnya ya — contoh: *stok AZT-MH350BSW*. Ketik 📚 untuk lihat format lain.', goto: ['stock', '📦 Stock'] };
@@ -124,6 +131,25 @@ function answer(q) {
   if (kind === 'activity') {
     const acts = ext.activity(6);
     return { text: `Aktivitas terakhir:\n${acts.map(a => `• ${a.username || 'system'} ${a.action.toLowerCase()} ${a.doc_no || a.module}${a.new_value ? ' → ' + String(a.new_value).slice(0, 30) : ''} (${a.at})`).join('\n')}`, goto: ['audit', '🔐 Audit'] };
+  }
+  if (kind === 'followups') {
+    const fus = crm.followupsDue(7);
+    if (!fus.length) return { text: 'Tidak ada follow-up jatuh tempo dalam 7 hari. ✅', goto: ['crm', '🤝 CRM'] };
+    return { text: `Follow-up due ≤7 hari (${fus.length}):\n${fus.map(f => `• **${f.target}** — ${f.activity_type}: ${f.summary} (due ${f.due_date})`).join('\n')}`, goto: ['crm', '🤝 CRM'] };
+  }
+  if (kind === 'leads') {
+    const leads = crm.listLeads();
+    const open = leads.filter(l => !['WON', 'LOST'].includes(l.stage));
+    if (!open.length) return { text: 'Belum ada lead terbuka. Tambah lewat tab 🤝 CRM.', goto: ['crm', '🤝 CRM'] };
+    const val = open.reduce((s, l) => s + (l.est_value || 0), 0);
+    return { text: `Pipeline: ${open.length} lead terbuka, nilai est. **${rp(val)}**.\n${open.slice(0, 6).map(l => `• **${l.company}** [${l.stage}] ${l.pic_name || ''} ${l.est_value ? '· ' + rp(l.est_value) : ''}`).join('\n')}`, goto: ['crm', '🤝 CRM'] };
+  }
+  if (kind === 'customers') {
+    const cs = rows(`SELECT bp.id, bp.name, bp.kind, bp.pic, bp.phone,
+        (SELECT COUNT(*) FROM sales_orders o WHERE o.customer_id = bp.id AND o.status = 'POSTED') orders
+      FROM business_partners bp WHERE bp.kind = 'CUSTOMER' AND bp.is_active = 1 ORDER BY bp.name LIMIT 10`);
+    if (!cs.length) return { text: 'Belum ada customer terdaftar.', goto: ['crm', '🤝 CRM'] };
+    return { text: `Customer (${cs.length} teratas):\n${cs.map(c => `• **${c.name}**${c.pic ? ' — ' + c.pic : ''}${c.phone ? ' · ' + c.phone : ''} · ${c.orders} order posted`).join('\n')}\nKlik untuk buka halaman 360 customer.`, goto: ['crm', '🤝 CRM'] };
   }
   return null; // unknown -> caller may try AI
 }
