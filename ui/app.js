@@ -584,4 +584,64 @@ window.go = async v => {
   } catch (e) { /* not logged in — /login will handle */ }
 })();
 document.querySelectorAll('nav a').forEach(a => a.onclick = () => go(a.dataset.v));
+// ---------------- Warehouses / Gudang (§18 per-warehouse view) ----------------
+views.warehouses = async () => {
+  const [whs, stock] = await Promise.all([api('/warehouses'), api('/stock')]);
+  const byWh = {};
+  for (const r of stock) (byWh[r.wh_code] = byWh[r.wh_code] || []).push(r);
+  const typeBadge = t => badge(t);
+  let html = `<h1>Warehouses / Gudang</h1>
+  <div class="sub">§18 · stok per gudang — klik kartu gudang untuk fokus · nilai stok = physical × avg cost</div>
+  <div class="grid">` +
+  whs.map(w => {
+    const items = byWh[w.code] || [];
+    const qty = items.reduce((s, r) => s + r.physical, 0);
+    const val = items.reduce((s, r) => s + r.stock_value, 0);
+    return `<div class="kpi" style="cursor:pointer" onclick="document.getElementById('wh-${w.id}').scrollIntoView({behavior:'smooth'})">
+      <div class="lbl">${w.code} · ${typeBadge(w.type)}</div>
+      <div class="val" style="font-size:15px">${w.name}</div>
+      <div class="mut" style="font-size:11.5px;margin-top:5px">${items.length} barang · ${qty} pcs · ${fmt(val)}</div>
+    </div>`;
+  }).join('') + `</div>
+  <button class="btn" onclick="document.getElementById('whform').classList.toggle('open')">＋ Tambah Gudang</button>
+  <div class="formbox" id="whform">
+    <b>Gudang Baru</b>
+    <form onsubmit="return addWarehouse(event)">
+      <div class="row">
+        <div style="flex:1"><label>Kode *</label><input name="code" required placeholder="WH-BALI"></div>
+        <div style="flex:2"><label>Nama Gudang *</label><input name="name" required placeholder="Gudang Bali"></div>
+        <div style="flex:1"><label>Tipe</label><select name="type">
+          <option value="MAIN">MAIN</option><option value="PROJECT">PROJECT</option>
+          <option value="SERVICE">SERVICE</option><option value="TRANSIT">TRANSIT</option></select></div>
+        <div style="flex:2"><label>Alamat</label><input name="address" placeholder="opsional"></div>
+        <div style="display:flex;align-items:flex-end"><button class="btn" type="submit">Simpan</button></div>
+      </div>
+    </form>
+  </div>` +
+  whs.map(w => {
+    const items = byWh[w.code] || [];
+    return `<h2 id="wh-${w.id}">🏬 ${w.name} <span class="mut" style="text-transform:none;letter-spacing:0">(${w.code} · ${w.type}${w.address ? ' · ' + w.address : ''})</span></h2>
+    <table><tr><th>Code</th><th>Product</th><th>EAN</th><th class="money">Physical</th><th class="money">Reserved</th>
+    <th class="money">Available</th><th class="money">Value</th></tr>
+    ${items.map(r => `<tr><td><a href="#" onclick="go('item-${r.product_id}');return false" style="color:inherit"><b>${r.code}</b></a></td>
+      <td>${r.name} <span class="mut">${r.brand||''}</span></td><td class="mut">${r.barcode||'—'}</td>
+      <td class="money">${r.physical}</td><td class="money">${r.reserved}</td>
+      <td class="money"><b class="${r.available<=0?'low':'ok'}">${r.available}</b></td>
+      <td class="money">${fmt(r.stock_value)}</td></tr>`).join('') ||
+      '<tr><td colspan=7 class="mut">belum ada barang di gudang ini — masukkan via Purchase Order → Receiving atau Transfer Gudang</td></tr>'}</table>`;
+  }).join('');
+  main.innerHTML = html;
+};
+window.addWarehouse = async ev => {
+  ev.preventDefault();
+  const b = Object.fromEntries(new FormData(ev.target).entries());
+  try {
+    const r = await api('/warehouses', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(b) });
+    toast(`Gudang ${b.name} tersimpan (ID ${r.id})`);
+    views.warehouses();
+  } catch (e) { toast(e.message, true); }
+  return false;
+};
+
 go('dash');
