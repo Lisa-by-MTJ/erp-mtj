@@ -17,6 +17,7 @@ function toast(msg, err) {
 const badge = s => `<span class="badge b-${String(s).replace(/\s/g,'_')}">${String(s).replace(/_/g,' ')}</span>`;
 const opt = (list, valKey, lbl) => list.map(x => `<option value="${x[valKey]}">${lbl(x)}</option>`).join('');
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const emptyState = (ico, msg) => `<div class="empty"><div class="ico">${ico}</div><div>${msg}</div></div>`;
 const kpiCard = (l, v, cls, jump, sub) =>
   `<div class="kpi${jump ? ' jump' : ''}"${jump ? ` onclick="go('${jump}')"` : ''}>
     <div class="lbl">${l}</div><div class="val ${cls || ''}">${v}</div>
@@ -164,9 +165,16 @@ views.dash = async () => {
 
 views.stock = async () => {
   const rows = await api('/stock');
-  main.innerHTML = `<h1>Stock &amp; Inventory</h1>
+  const mv = (await api('/movements')).slice(0, 15);
+  const mvHtml = mv.length
+    ? `<table><tr><th>ID</th><th>Type</th><th>Product</th><th>Wh</th><th class="money">ΔQty</th><th>Ref</th></tr>
+    ${mv.map(m => `<tr><td>${m.id}</td><td>${m.movement_type}</td>
+    <td>${esc(m.pcode)}</td><td>${esc(m.wh_name)}</td><td class="money ${m.qty_delta<0?'low':'ok'}">${m.qty_delta}</td>
+    <td class="mut">${m.ref_no||''}</td></tr>`).join('')}</table>`
+    : emptyState('📭', 'Belum ada pergerakan stok.');
+  main.innerHTML = `<div class="viewhead"><h1>Stock &amp; Inventory</h1>
+    <div class="vh-actions"><button class="btn" onclick="const f=document.getElementById('pform');f.classList.toggle('open');if(f.classList.contains('open'))f.querySelector('input').focus()">＋ Tambah Barang</button></div></div>
   <div class="sub">§18 Available = Physical − Reserved · §20 every change is a stock movement · klik kode barang untuk detail</div>
-  <button class="btn" onclick="const f=document.getElementById('pform');f.classList.toggle('open');if(f.classList.contains('open'))f.querySelector('input').focus()">＋ Tambah Barang</button>
   <div class="formbox" id="pform">
     <b>Master Barang Baru</b>
     <form onsubmit="return addProduct(event)">
@@ -179,21 +187,21 @@ views.stock = async () => {
       </div>
       <div class="row">
         <div style="flex:1"><label>Tipe</label><select name="type">
-          <option value="FINISHED_GOODS">FINISHED_GOODS</option><option value="SPAREPART">SPAREPART</option>
-          <option value="MATERIAL">MATERIAL</option><option value="ACCESSORIES">ACCESSORIES</option>
-          <option value="ASSET">ASSET</option></select></div>
+          <option value="FINISHED_GOODS">Barang Jadi</option><option value="SPAREPART">Suku Cadang</option>
+          <option value="MATERIAL">Bahan Baku</option><option value="ACCESSORIES">Aksesoris</option>
+          <option value="ASSET">Aset</option></select></div>
         <div style="flex:1"><label>Kategori</label><input name="category" placeholder="lighting"></div>
         <div style="flex:.6"><label>Satuan</label><input name="uom" value="PCS"></div>
         <div style="flex:1"><label>Kebijakan Serial</label><select name="serial_policy">
-          <option value="NONE">NONE</option><option value="REQUIRED">REQUIRED</option><option value="BATCH">BATCH</option></select></div>
+          <option value="NONE">Tidak Ada</option><option value="REQUIRED">Wajib</option><option value="BATCH">Per Batch</option></select></div>
         <div style="flex:.7"><label>Garansi (bln)</label><input name="warranty_months" type="number" value="12" min="0"></div>
       </div>
       <div class="row">
         <div style="flex:1"><label>Harga Modal (Rp)</label><input name="cost_price" type="number" min="0" value="0"></div>
         <div style="flex:1"><label>Harga Retail (Rp)</label><input name="retail_price" type="number" min="0" value="0"></div>
         <div style="flex:1"><label>Harga Project (Rp)</label><input name="project_price" type="number" min="0" value="0"></div>
-        <div style="flex:.6"><label>Min. Stock</label><input name="min_stock" type="number" min="0" value="0"></div>
-        <div style="flex:.6"><label>Reorder</label><input name="reorder_point" type="number" min="0" value="0"></div>
+        <div style="flex:.6"><label>Stok Minimum</label><input name="min_stock" type="number" min="0" value="0"></div>
+        <div style="flex:.6"><label>Titik Pemesanan</label><input name="reorder_point" type="number" min="0" value="0"></div>
         <div style="display:flex;align-items:flex-end"><button class="btn" type="submit">Simpan</button></div>
       </div>
     </form>
@@ -206,10 +214,8 @@ views.stock = async () => {
     <td class="money"><b class="${r.available<=0?'low':'ok'}">${r.available}</b></td>
     <td class="money">${fmt(r.stock_value)}</td></tr>`).join('')}</table>
   <h2>Recent Movements (§20)</h2>
-  <table><tr><th>ID</th><th>Type</th><th>Product</th><th>Wh</th><th class="money">ΔQty</th><th>Ref</th></tr>
-  ${(await api('/movements')).slice(0,15).map(m => `<tr><td>${m.id}</td><td>${m.movement_type}</td>
-    <td>${esc(m.pcode)}</td><td>${esc(m.wh_name)}</td><td class="money ${m.qty_delta<0?'low':'ok'}">${m.qty_delta}</td>
-    <td class="mut">${m.ref_no||''}</td></tr>`).join('')}</table>`;
+  ${mvHtml}
+`;
 };
 window.addProduct = async ev => {
   ev.preventDefault();
@@ -229,7 +235,7 @@ views.docs = async () => {
   const kinds = [['purchase_orders','Purchase Orders'],['receivings','Warehouse Receiving'],
                  ['stock_transfers','Stock Transfers'],
                  ['quotations','Quotations'],['sales_orders','Sales Orders']];
-  let html = `<h1>Purchase &amp; Sales Documents</h1><div class="sub">§11 lifecycle: DRAFT → SUBMITTED → APPROVED → POSTED (locked)</div>`;
+  let html = `<div class="viewhead"><h1>Purchase &amp; Sales Documents</h1></div><div class="sub">§11 lifecycle: DRAFT → SUBMITTED → APPROVED → POSTED (locked)</div>`;
   for (const [t, label] of kinds) {
     const list = await api('/docs/' + t);
     html += `<h2>${label}</h2><table><tr><th>Doc No</th><th>Partner / Route</th><th>Date</th>
@@ -349,7 +355,7 @@ window.mkRCV = async () => {
 
 views.projects = async () => {
   const list = await api('/projects');
-  main.innerHTML = `<h1>Projects</h1><div class="sub">§24-§27 · billing ≠ delivery · Control Tower per project</div>
+  main.innerHTML = `<div class="viewhead"><h1>Projects</h1></div><div class="sub">§24-§27 · billing ≠ delivery · Control Tower per project</div>
   <table><tr><th>Code</th><th>Project</th><th>Customer</th><th class="money">Contract</th>
   <th class="money">Billed</th><th class="money">Outstanding</th><th class="money">Cost</th><th>Status</th><th></th></tr>
   ${list.map(p => `<tr><td><b>${esc(p.project_code)}</b></td><td>${esc(p.name)}</td><td>${esc(p.customer_name)}</td>
@@ -361,7 +367,7 @@ views.projects = async () => {
 window.tower = async id => {
   const t = await api('/projects/' + id);
   const p = t.project;
-  main.innerHTML = `<h1>🔦 Project Control Tower — ${esc(p.project_code)}</h1>
+  main.innerHTML = `<div class="viewhead"><h1>🔦 Project Control Tower — ${esc(p.project_code)}</h1></div>
   <div class="sub">${esc(p.name)} · ${esc(p.customer_name)} · site: ${esc(p.site_location||'—')}</div>
   <div class="grid">
     <div class="kpi"><div class="lbl">Contract Value</div><div class="val teal">${fmt(p.contract_value)}</div></div>
@@ -384,7 +390,7 @@ window.payBill = async (pid, bid) => {
 };
 views.profit = async () => {
   const list = await api('/profitability');
-  main.innerHTML = `<h1>Project Profitability (§35)</h1>
+  main.innerHTML = `<div class="viewhead"><h1>Project Profitability (§35)</h1></div>
   <div class="sub">Gross Profit = Revenue − Project Cost · Margin = GP ÷ Revenue × 100%</div>
   <table><tr><th>Project</th><th class="money">Revenue</th><th class="money">Cost</th>
   <th class="money">Gross Profit</th><th class="money">Margin %</th><th>Status</th></tr>
@@ -398,7 +404,7 @@ views.delivery = async () => {
   const list = await api('/delivery-orders');
   const sos = await api('/docs/sales_orders');
   const postedSOs = sos.filter(s => s.status === 'POSTED');
-  main.innerHTML = `<h1>Delivery Orders &amp; Surat Jalan</h1>
+  main.innerHTML = `<div class="viewhead"><h1>Delivery Orders &amp; Surat Jalan</h1></div>
   <div class="sub">§28 · 3 copies: Customer / MTJ Administration / Warehouse · signed copy closes the DO</div>
   <div class="formbox"><h2 style="margin-top:0">New Delivery from posted SO</h2>
    <div class="row">
@@ -428,7 +434,7 @@ window.mkDO = async () => {
 };
 views.warranty = async () => {
   const [warr, serv, wos] = await Promise.all([api('/warranties'), api('/service-orders'), api('/work-orders')]);
-  main.innerHTML = `<h1>Warranty &amp; Service Center</h1>
+  main.innerHTML = `<div class="viewhead"><h1>Warranty &amp; Service Center</h1></div>
   <div class="sub">§29-§33 · warranty born from deliveries · service tracks status until customer pickup</div>
   <h2>Warranty Certificates</h2>
   <table><tr><th>No</th><th>Customer</th><th>Product</th><th>Serial</th><th>Start</th><th>End</th><th>Status</th></tr>
@@ -528,7 +534,7 @@ window.changeMyPw = async ev => {
 
 views.audit = async () => {
   const rowsL = await api('/audit');
-  main.innerHTML = `<h1>Audit Trail (§12)</h1>
+  main.innerHTML = `<div class="viewhead"><h1>Audit Trail (§12)</h1></div>
   <div class="sub">Every change: user · date · module · doc · action · old → new</div>
   <table><tr><th>When</th><th>Module</th><th>Doc</th><th>Action</th></tr>
   ${rowsL.map(a => `<tr><td class="mut">${a.at}</td><td>${esc(a.module)}</td><td>${esc(a.doc_no||'')}</td><td><b>${esc(a.action)}</b></td></tr>`).join('')}</table>`;
@@ -830,7 +836,7 @@ views.warehouses = async () => {
   const byWh = {};
   for (const r of stock) (byWh[r.wh_code] = byWh[r.wh_code] || []).push(r);
   const typeBadge = t => badge(t);
-  let html = `<h1>Warehouses / Gudang</h1>
+  let html = `<div class="viewhead"><h1>Warehouses / Gudang</h1></div>
   <div class="sub">§18 · stok per gudang — klik kartu gudang untuk fokus · nilai stok = physical × avg cost</div>
   <div class="grid">` +
   whs.map(w => {

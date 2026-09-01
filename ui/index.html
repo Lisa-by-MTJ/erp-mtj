@@ -121,6 +121,17 @@ body.side-collapsed .logo{justify-content:center;padding:12px 0 16px}
 .minibars .bar span{position:absolute;top:-15px;left:50%;transform:translateX(-50%);font-size:9px;color:var(--hi);font-weight:600;white-space:nowrap;display:none}
 .minibars .bar:hover span,.minibars .bar.cur span{display:block}
 .minibars i{flex:1;text-align:center;font-style:normal;font-size:9px;color:var(--mut);margin-top:3px}
+/* ---- shared view header (item 2) ---- */
+.viewhead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 4px;flex-wrap:wrap}
+.viewhead h1{font-size:20px;margin:0}
+.viewhead .vh-actions{display:flex;gap:8px;align-items:center}
+/* ---- zero-KPI legibility (item 1): keep value visible instead of faded to nothing ---- */
+.kpi .val.mut0, .kpicell .kval.mut0{opacity:1;filter:none;color:var(--mut)}
+/* ---- empty-state block (item 4) ---- */
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
+  padding:26px 16px;color:var(--mut);font-size:13px;background:var(--card);border:1px dashed var(--line);
+  border-radius:10px;margin:6px 0 14px}
+.empty .ico{font-size:26px;opacity:.6}
 .dashhead{display:flex;align-items:center;justify-content:space-between;margin:20px 0 8px}
 .dashhead h2{font-size:13px;color:var(--hi);letter-spacing:.1em}
 .pbtns{display:flex;gap:6px}
@@ -128,7 +139,6 @@ body.side-collapsed .logo{justify-content:center;padding:12px 0 16px}
 .kpi.jump{cursor:pointer;transition:transform .12s,box-shadow .12s}
 .kpi.jump:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(27,54,145,.16);border-color:var(--panel2)}
 .kpi .ksub{color:var(--mut);font-size:10.5px;margin-top:5px;line-height:1.4}
-.val.mut0, .kpi .val.mut0{opacity:.32;filter:grayscale(1)}
 .chartbox{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 14px 8px}
 .bars{display:flex;align-items:flex-end;gap:7px;height:120px}
 .bars .bar{flex:1;background:linear-gradient(180deg,#2f56c4,#1b3691);border-radius:4px 4px 0 0;min-height:2px;position:relative}
