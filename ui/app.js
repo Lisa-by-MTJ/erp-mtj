@@ -668,7 +668,15 @@ window.mkTrf = async () => {
 // ---------------- CRM (leads / follow-ups) ----------------
 const CRM_STAGES = ['NEW', 'CONTACTED', 'QUOTED', 'NEGOTIATION', 'WON', 'LOST'];
 views.crm = async () => {
-  const [leads, fus] = await Promise.all([api('/crm/leads'), api('/crm/followups?days=7')]);
+  const [leads, fus, partners, sos] = await Promise.all([api('/crm/leads'), api('/crm/followups?days=7'),
+    api('/partners'), api('/docs/sales_orders')]);
+  const cust = partners.filter(p => p.kind === 'CUSTOMER').sort((a, b) => a.name.localeCompare(b.name));
+  const agg = {};
+  for (const s of sos) { const a = agg[s.customer_id] = agg[s.customer_id] || { n: 0, v: 0 }; a.n++; a.v += s.grand_total || 0; }
+  const crows = cust.map(c => { const a = agg[c.id]; return `<tr data-n="${esc((c.name + ' ' + (c.pic || '') + ' ' + (c.city || '') + ' ' + (c.code || '')).toLowerCase())}">
+    <td><b><a href="#" onclick="go('crm-${c.id}');return false" style="color:inherit">${esc(c.name)}</a></b>${c.code === 'BUCKET-ASJ' ? ' <span class="badge b-review">review</span>' : ''}</td>
+    <td>${esc(c.pic || '—')}</td><td>${esc(c.phone || '—')}</td><td>${esc(c.city || '—')}</td>
+    <td class="money">${a ? a.n : 0}</td><td class="money">${a ? 'Rp ' + a.v.toLocaleString('id-ID') : '—'}</td></tr>`; }).join('');
   const open = leads.filter(l => !['WON', 'LOST'].includes(l.stage));
   const closed = leads.filter(l => ['WON', 'LOST'].includes(l.stage));
   const leadCard = l => `<div class="leadcard">
@@ -684,8 +692,11 @@ views.crm = async () => {
       ${l.customer_id ? `<button class="btn sm gray" onclick="go('crm-${l.customer_id}')">360</button>` : ''}
     </div></div>`;
   main.innerHTML = `
-  <h1>CRM — Leads &amp; Follow-ups</h1>
-  <div class="sub">Pipeline prospek · catat aktivitas · convert WON → customer master · due follow-ups 7 hari</div>
+  <h1>CRM — Customers · Leads · Follow-ups</h1>
+  <div class="sub">${cust.length} customer master · pipeline prospek · klik nama untuk Customer 360</div>
+  <input id="custq" placeholder="🔍 Filter customer / PIC / kota…" style="width:320px;margin:8px 0" oninput="crmFilter(this.value)">
+  <table id="custtbl"><tr><th>Customer</th><th>PIC</th><th>Phone</th><th>City</th><th class="money">Invoices</th><th class="money">Total Value</th></tr>
+  ${crows}</table>
   <button class="btn" onclick="document.getElementById('leadform').classList.toggle('open')">＋ Tambah Lead</button>
   <div class="formbox" id="leadform">
     <b>Lead Baru</b>
@@ -725,6 +736,12 @@ views.crm = async () => {
     <td class="mut">${esc(l.lost_reason || '')}</td></tr>`).join('') || '<tr><td colspan=5 class=mut>belum ada</td></tr>'}</table>`;
 };
 const rp2 = n => 'Rp ' + Number(n || 0).toLocaleString('id-ID', { maximumFractionDigits: 0 });
+window.crmFilter = q => {
+  q = q.toLowerCase().trim();
+  document.querySelectorAll('#custtbl tr[data-n]').forEach(tr => {
+    tr.style.display = !q || tr.dataset.n.includes(q) ? '' : 'none';
+  });
+};
 window.crmAddLead = async ev => {
   ev.preventDefault();
   const b = Object.fromEntries(new FormData(ev.target).entries());
