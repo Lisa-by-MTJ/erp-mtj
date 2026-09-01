@@ -821,8 +821,14 @@ window.go = async v => {
     const s = await api('/session');
     const h = document.createElement('div');
     h.id = 'whoami';
-    h.innerHTML = `Signed in as <b>${esc(s.user)}</b> <span class="mut">· ${esc(s.role)}</span><button id="logout" onclick="location.href='/logout'">Log out</button>`;
-    main.before(h);
+    const initials = esc(String(s.user || '?').slice(0, 2));
+    h.innerHTML = `<span class="avatar">${initials}</span>Signed in as <b>${esc(s.user)}</b>` +
+      `<span class="rolebadge">${esc(s.role)}</span>` +
+      `<button id="logout" onclick="location.href='/logout'">Log out</button>`;
+    const tb = $('#topbar');
+    tb.innerHTML = '';
+    tb.appendChild(h);
+    tb.classList.add('show');
     if (s.role === 'ADMIN') {
       const usersLink = document.querySelector('nav a[data-v="users"]');
       if (usersLink) usersLink.style.display = '';

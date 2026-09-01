@@ -18,7 +18,7 @@ nav::after{content:'';display:block;position:sticky;top:0;height:0;box-shadow:0 
 nav a{display:block;padding:9px 18px;color:#b9c4ea;text-decoration:none;font-size:13px;cursor:pointer;border-left:3px solid transparent}
 nav a:hover{background:rgba(255,255,255,.08);color:#fff}
 nav a.on{color:#fff;font-weight:700;border-left:3px solid #ff8a2a;background:linear-gradient(90deg,rgba(255,255,255,.14),rgba(255,255,255,0))}
-main{flex:1;padding:22px 28px;max-width:1250px}
+main{flex:1;padding:22px 28px;max-width:1250px;width:100%}
 h1{font-size:20px;margin-bottom:4px}
 h2{font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.12em;margin:22px 0 10px;
   border-bottom:1px solid var(--line);padding-bottom:5px}
@@ -69,11 +69,21 @@ padding:10px 16px;border-radius:9px;display:none;font-size:13px;z-index:9;box-sh
 #whform{display:none;margin-top:12px}
 #whform.open{display:block}
 .low{color:#8a1c1c;font-style:italic}.ok{color:var(--hi)}
-#whoami{color:var(--mut);font-size:12px;margin-bottom:14px}
+/* ---- top bar with sign-in status (top right) ---- */
+#content{flex:1;display:flex;flex-direction:column;min-width:0}
+#topbar{display:none;position:sticky;top:0;z-index:6;justify-content:flex-end;align-items:center;gap:12px;
+padding:9px 28px;background:rgba(243,244,248,.88);backdrop-filter:blur(6px);border-bottom:1px solid var(--line)}
+#topbar.show{display:flex}
+#whoami{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);
+border-radius:99px;padding:5px 7px 5px 14px;font-size:12.5px;color:var(--mut);box-shadow:0 2px 8px rgba(14,26,69,.07)}
+#whoami .avatar{width:30px;height:30px;border-radius:50%;background:var(--grad);color:#fff;font-size:12.5px;font-weight:700;
+display:flex;align-items:center;justify-content:center;text-transform:uppercase;flex-shrink:0}
 #whoami b{color:var(--hi)}
-#logout{background:transparent;border:1px solid var(--line);color:var(--mut);border-radius:7px;
-padding:5px 10px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;margin-left:8px}
-#logout:hover{border-color:var(--hi);color:var(--hi)}
+#whoami .rolebadge{background:var(--soft);border:1px solid var(--line);border-radius:99px;padding:2px 9px;font-size:10px;
+font-weight:700;letter-spacing:.08em;color:var(--hi);text-transform:uppercase}
+#logout{background:linear-gradient(135deg,#1b3691,#2f56c4);border:1px solid #1b3691;color:#fff;border-radius:99px;
+padding:7px 16px;font-size:11.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;cursor:pointer}
+#logout:hover{background:linear-gradient(135deg,#0e1a45,#1b3691)}
 /* ---- Collapsible sidebar ---- */
 nav{width:220px;transition:width .18s ease;overflow:hidden;white-space:nowrap}
 nav a span.lbl{display:inline}
@@ -82,9 +92,11 @@ body.side-collapsed nav a{padding:9px 0;text-align:center;border-left-width:0;fo
 body.side-collapsed nav a span.lbl{display:none}
 body.side-collapsed .logo span.txt{display:none}
 body.side-collapsed .logo{justify-content:center;padding:12px 0 16px}
-#side-toggle{position:sticky;top:0;float:right;background:transparent;border:none;color:#aab6e3;font-size:15px;
-  cursor:pointer;padding:6px 10px;margin:2px 6px 0 0;border-radius:7px;line-height:1}
-#side-toggle:hover{background:rgba(255,255,255,.12);color:#fff}
+#side-toggle{position:sticky;top:0;float:right;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.22);
+  color:#e8ecfa;font-size:21px;cursor:pointer;width:38px;height:38px;margin:4px 10px 0 0;border-radius:10px;
+  line-height:1;display:flex;align-items:center;justify-content:center;font-weight:700}
+#side-toggle:hover{background:rgba(255,255,255,.22);color:#fff}
+body.side-collapsed #side-toggle{float:none;margin:4px auto 8px;display:flex}
 /* ---- Dashboard v3: Odoo-spreadsheet canvas ---- */
 .sheetwrap{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:0;overflow:hidden;box-shadow:0 2px 10px rgba(14,26,69,.06)}
 .sheetname{display:flex;gap:2px;padding:7px 10px 0;background:linear-gradient(180deg,#eef1f9,#e7ebf5);border-bottom:1px solid var(--line)}
@@ -217,7 +229,10 @@ table.acts td{padding:7px 10px}
  <a data-v="audit">🔐 <span class="lbl">Audit Trail</span></a>
  <a data-v="users" style="display:none">👥 <span class="lbl">Users &amp; Access</span></a>
 </nav>
+<div id="content">
+<div id="topbar"></div>
 <main id="main"></main>
+</div>
 <div id="toast"></div>
 <button id="lisa-fab" title="Tanya Lisa" onclick="lisaToggle()">💬</button>
 <div id="lisa-box">
