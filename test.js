@@ -1,6 +1,18 @@
 // §62 Testing Principle — numbers must stay consistent across the whole chain.
+// SAFETY: tests NEVER touch the production database. We always redirect
+// MTJ_DATA_DIR to a throwaway temp dir (unless the caller set one explicitly
+// via MTJ_TEST_DATA_DIR) and seed fixtures into it before requiring db.js.
 'use strict';
+process.env.MTJ_USER = process.env.MTJ_USER || 'testadmin';
+process.env.MTJ_PASS = process.env.MTJ_PASS || 'testpass-only';
+if (!process.env.MTJ_TEST_DATA_DIR) {
+  const fsx = require('node:fs');
+  process.env.MTJ_TEST_DATA_DIR = fsx.mkdtempSync(require('node:os').tmpdir() + '/mtj-erp-test-');
+  process.on('exit', () => { try { require('node:fs').rmSync(process.env.MTJ_TEST_DATA_DIR, { recursive: true, force: true }); } catch (e) { /* best effort */ } });
+}
+process.env.MTJ_DATA_DIR = process.env.MTJ_TEST_DATA_DIR;
 const assert = require('node:assert');
+require('./seed.js'); // creates schema + fixtures (AZT-MH350BSW, WH-JKT-MAIN, ...) in the sandbox
 const { db, totalsForProduct } = require('./db.js');
 const { transition } = require('./approval.js');
 const { post } = require('./posting.js');
