@@ -83,6 +83,7 @@ route('POST', '/api/users', async (c) => {
   const username = String(b.username || '').trim();
   if (!username || !b.full_name || !b.password)
     return bad(c.res, 400, 'username, full_name and password required');
+  if (String(b.password).length < 6) return bad(c.res, 400, 'Password must be at least 6 characters');
   if (!ROLES.includes(b.role)) return bad(c.res, 400, `role must be one of ${ROLES.join(', ')}`);
   if (one(`SELECT id FROM users WHERE username=?`, username))
     return bad(c.res, 409, 'Duplicate username');
@@ -143,6 +144,7 @@ route('POST', '/api/users/:id/delete', async (c) => {
 route('POST', '/api/me/password', async (c) => {
   const b = await readBody(c.req);
   if (!b.old_password || !b.new_password) return bad(c.res, 400, 'old_password and new_password required');
+  if (String(b.new_password).length < 6) return bad(c.res, 400, 'New password must be at least 6 characters');
   const { verifyPassword, hashPassword } = require('./db.js');
   const me = c.user || {};
   const u = one(`SELECT * FROM users WHERE username=? AND is_active=1`, me.username || '');
