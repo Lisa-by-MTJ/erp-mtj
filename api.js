@@ -170,7 +170,7 @@ route('POST', '/api/products', async (c) => {
     b.type || 'FINISHED_GOODS', b.category || null, b.uom || 'PCS',
     b.serial_policy || 'NONE', b.warranty_months ?? 12, b.cost_price || 0,
     b.retail_price || 0, b.project_price || 0, b.min_stock || 0, b.reorder_point || 0);
-  audit(1, 'products', 'CREATE', { entity: Number(info.lastInsertRowid), newv: b.code });
+  audit((c.user && c.user.id) || 1, 'products', 'CREATE', { entity: Number(info.lastInsertRowid), newv: b.code });
   return ok(c.res, { id: Number(info.lastInsertRowid) });
 });
 route('GET', '/api/partners', (c) => ok(c.res,
@@ -184,7 +184,7 @@ route('POST', '/api/partners', async (c) => {
     b.kind, b.code || nextCodeVal(b.kind), b.name, b.customer_type || 'RETAIL', b.pic || null,
     b.phone || null, b.email || null, b.npwp || null, b.pkp_status || 'NON_PPN',
     b.payment_term_days || 0, b.address || null, b.city || null);
-  audit(1, 'business_partners', 'CREATE', { entity: Number(info.lastInsertRowid), newv: b.name });
+  audit((c.user && c.user.id) || 1, 'business_partners', 'CREATE', { entity: Number(info.lastInsertRowid), newv: b.name });
   return ok(c.res, { id: Number(info.lastInsertRowid) });
 });
 function nextCodeVal(kind) {
@@ -237,7 +237,7 @@ route('POST', '/api/products/:id', async (c) => {
       if (dup) return bad(c.res, 409, 'EAN already used by another product');
     }
     run(`UPDATE products SET barcode=? WHERE id=?`, b.barcode || null, id);
-    audit(1, 'products', 'UPDATE', { entity: id, field: 'barcode', old: p.barcode, newv: b.barcode || null });
+    audit((c.user && c.user.id) || 1, 'products', 'UPDATE', { entity: id, field: 'barcode', old: p.barcode, newv: b.barcode || null });
   }
   return ok(c.res, one(`SELECT * FROM products WHERE id=?`, id));
 });
@@ -262,7 +262,7 @@ route('POST', '/api/products/:id/photo', (c) => new Promise(resolve => {
       fs.writeFileSync(path.join(dir, name), Buffer.concat(chunks));
       const urlPath = `/uploads/products/${name}`;
       run(`UPDATE products SET photo_url=? WHERE id=?`, urlPath, id);
-      audit(1, 'products', 'PHOTO_UPLOAD', { entity: id, newv: urlPath });
+      audit((c.user && c.user.id) || 1, 'products', 'PHOTO_UPLOAD', { entity: id, newv: urlPath });
       ok(c.res, { photo_url: urlPath });
     } catch (e) { bad(c.res, 500, e.message); }
     resolve();
@@ -275,7 +275,7 @@ route('POST', '/api/warehouses', async (c) => {
   if (!b.code || !b.name) return bad(c.res, 400, 'code and name required');
   const info = run(`INSERT INTO warehouses(code,name,type,address) VALUES(?,?,?,?)`,
       b.code, b.name, b.type || 'MAIN', b.address || null);
-  audit(1, 'warehouses', 'CREATE', { entity: Number(info.lastInsertRowid), newv: b.name });
+  audit((c.user && c.user.id) || 1, 'warehouses', 'CREATE', { entity: Number(info.lastInsertRowid), newv: b.name });
   return ok(c.res, { id: Number(info.lastInsertRowid) });
 });
 route('GET', '/api/movements', (c) => ok(c.res, rows(`
@@ -325,7 +325,7 @@ route('POST', '/api/stock-transfers', async (c) => {
       run(`INSERT INTO stock_transfer_lines(stock_transfer_id,product_id,qty,serials) VALUES(?,?,?,?)`,
           id, l.product_id, l.qty, JSON.stringify(l.serials || []));
     }
-    audit(1, 'stock_transfers', 'CREATE', { docNo: no, entity: id });
+    audit((c.user && c.user.id) || 1, 'stock_transfers', 'CREATE', { docNo: no, entity: id });
     return ok(c.res, { id, doc_no: no });
   } catch (e) { return bad(c.res, 422, e.message); }
 });
@@ -378,7 +378,7 @@ route('POST', '/api/purchase-orders', async (c) => {
         VALUES(?,?,?,?,?,?)`, id, l.product_id, l.qty, l.unit_price, l.discount_pct||0,
         Math.round(l.qty*l.unit_price*(1-(l.discount_pct||0)/100)*100)/100);
     }
-    audit(1, 'purchase_orders', 'CREATE', { docNo: no, entity: id });
+    audit((c.user && c.user.id) || 1, 'purchase_orders', 'CREATE', { docNo: no, entity: id });
     return ok(c.res, { id, doc_no: no });
   } catch (e) { return bad(c.res, 422, e.message); }
 });
@@ -396,7 +396,7 @@ route('POST', '/api/receivings', async (c) => {
       run(`INSERT INTO receiving_lines(receiving_id,product_id,qty,unit_cost,serials) VALUES(?,?,?,?,?)`,
         id, l.product_id, l.qty, l.unit_cost||0, JSON.stringify(l.serials||[]));
     }
-    audit(1, 'receivings', 'CREATE', { docNo: no, entity: id });
+    audit((c.user && c.user.id) || 1, 'receivings', 'CREATE', { docNo: no, entity: id });
     return ok(c.res, { id, doc_no: no });
   } catch (e) { return bad(c.res, 422, e.message); }
 });
@@ -412,7 +412,7 @@ route('POST', '/api/quotations', async (c) => {
     const id = Number(info.lastInsertRowid);
     insertLines('quotation_lines', 'quotation_id', id, b.lines || []);
     calcAndStoreTotals('quotations', id, b.lines || [], b.tax_code || 'PPN');
-    audit(1, 'quotations', 'CREATE', { docNo: no, entity: id });
+    audit((c.user && c.user.id) || 1, 'quotations', 'CREATE', { docNo: no, entity: id });
     return ok(c.res, { id, doc_no: no, totals: one(`SELECT subtotal,tax_amount,grand_total FROM quotations WHERE id=?`, id) });
   } catch (e) { return bad(c.res, 422, e.message); }
 });
@@ -428,7 +428,7 @@ route('POST', '/api/sales-orders', async (c) => {
     const id = Number(info.lastInsertRowid);
     insertLines('sales_order_lines', 'sales_order_id', id, b.lines || []);
     calcAndStoreTotals('sales_orders', id, b.lines || [], b.tax_code || 'PPN');
-    audit(1, 'sales_orders', 'CREATE', { docNo: no, entity: id });
+    audit((c.user && c.user.id) || 1, 'sales_orders', 'CREATE', { docNo: no, entity: id });
     return ok(c.res, { id, doc_no: no });
   } catch (e) { return bad(c.res, 422, e.message); }
 });
@@ -468,7 +468,7 @@ route('POST', '/api/delivery-orders', async (c) => {
       run(`INSERT INTO delivery_order_lines(delivery_order_id,sales_order_line_id,product_id,serial_id,qty)
         VALUES(?,?,?,?,?)`, id, l.sales_order_line_id || null, l.product_id, l.serial_id || null, l.qty);
     }
-    audit(1, 'delivery_orders', 'CREATE', { docNo: no + ' / ' + sj, entity: id });
+    audit((c.user && c.user.id) || 1, 'delivery_orders', 'CREATE', { docNo: no + ' / ' + sj, entity: id });
     return ok(c.res, { id, doc_no: no, surat_jalan_no: sj });
   } catch (e) { return bad(c.res, 422, e.message); }
 });
@@ -477,7 +477,7 @@ route('POST', '/api/delivery-orders/:id/close-signed', async (c) => {
   const b = await readBody(c.req);
   run(`UPDATE delivery_orders SET signed_copy_url=?, closed_at=datetime('now'), status='LOCKED' WHERE id=? AND status='POSTED'`,
       b.signed_copy_url || 'uploaded', Number(c.params.id));
-  audit(1, 'delivery_orders', 'CLOSE_SIGNED', { entity: Number(c.params.id) });
+  audit((c.user && c.user.id) || 1, 'delivery_orders', 'CLOSE_SIGNED', { entity: Number(c.params.id) });
   return ok(c.res, { closed: true });
 });
 
@@ -519,7 +519,7 @@ route('POST', '/api/projects', async (c) => {
       { label: 'DP', percent: 30 }, { label: 'Progress 1', percent: 40 }, { label: 'Retention', percent: 30 }];
     terms.forEach((t, i) => run(`INSERT INTO project_billings(project_id,seq,label,percent,amount) VALUES(?,?,?,?,?)`,
       pid, i, t.label, t.percent, Math.round((b.contract_value||0) * (t.percent/100))));
-    audit(1, 'projects', 'CREATE', { docNo: code, entity: pid });
+    audit((c.user && c.user.id) || 1, 'projects', 'CREATE', { docNo: code, entity: pid });
     return ok(c.res, { id: pid, project_code: code });
   } catch (e) { return bad(c.res, 422, e.message); }
 });
@@ -527,7 +527,7 @@ route('POST', '/api/projects/:id/billings/:bid/pay', async (c) => {
   if (!requirePerm(c, 'workflow')) return;
   run(`UPDATE project_billings SET status='PAID', paid_amount=amount, paid_at=date('now') WHERE id=? AND project_id=?`,
       Number(c.params.bid), Number(c.params.id));
-  audit(1, 'projects', 'BILLING_PAID', { entity: Number(c.params.id) });
+  audit((c.user && c.user.id) || 1, 'projects', 'BILLING_PAID', { entity: Number(c.params.id) });
   return ok(c.res, one(`SELECT * FROM project_billings WHERE id=?`, Number(c.params.bid)));
 });
 route('POST', '/api/projects/:id/costs', async (c) => {
@@ -551,7 +551,7 @@ route('POST', '/api/warranty-claims', async (c) => {
     run(`INSERT INTO warranty_claims(claim_no,warranty_id,problem,technician_id,status) VALUES(?,?,?,?,'OPEN')`,
         no, b.warranty_id, b.problem || '', b.technician_id || null);
     run(`UPDATE warranties SET status='CLAIMED' WHERE id=?`, b.warranty_id);
-    audit(1, 'warranty_claims', 'CREATE', { docNo: no });
+    audit((c.user && c.user.id) || 1, 'warranty_claims', 'CREATE', { docNo: no });
     return ok(c.res, { claim_no: no });
   } catch (e) { return bad(c.res, 422, e.message); }
 });
@@ -579,7 +579,7 @@ route('POST', '/api/service-orders', async (c) => {
     }
     run(`INSERT INTO service_orders(doc_no,customer_id,product_id,complaint,warranty_status_at_receiving)
          VALUES(?,?,?,?,?)`, no, b.customer_id, b.product_id, b.complaint || '', wstat);
-    audit(1, 'service_orders', 'RECEIVE', { docNo: no });
+    audit((c.user && c.user.id) || 1, 'service_orders', 'RECEIVE', { docNo: no });
     return ok(c.res, { doc_no: no, warranty_status: wstat });
   } catch (e) { return bad(c.res, 422, e.message); }
 });
@@ -595,7 +595,7 @@ route('POST', '/api/work-orders', async (c) => {
       no, b.project_id || null, b.customer_id || null, b.location || null,
       b.scheduled_date || new Date().toISOString().slice(0,10), b.work_description || '',
       JSON.stringify(b.technicians || []), 'DRAFT');
-    audit(1, 'work_orders', 'CREATE', { docNo: no });
+    audit((c.user && c.user.id) || 1, 'work_orders', 'CREATE', { docNo: no });
     return ok(c.res, { doc_no: no });
   } catch (e) { return bad(c.res, 422, e.message); }
 });
