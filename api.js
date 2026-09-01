@@ -355,10 +355,63 @@ route('GET', '/api/docs/:table', (c) => {
     JOIN warehouses wf ON wf.id=t.from_warehouse_id JOIN warehouses wt ON wt.id=t.to_warehouse_id
     ORDER BY t.id DESC`));
   const col = DOC_PARTNER_COL[c.params.table];
+  const att = `(SELECT COUNT(*) FROM doc_attachments da WHERE da.table_name='${c.params.table}' AND da.doc_id=d.id)`;
   return ok(c.res, rows(col
-    ? `SELECT d.*, bp.name partner_name FROM ${c.params.table} d
+    ? `SELECT d.*, bp.name partner_name, ${att} attachments_n FROM ${c.params.table} d
        LEFT JOIN business_partners bp ON bp.id=d.${col} ORDER BY d.id DESC`
-    : `SELECT d.*, NULL partner_name FROM ${c.params.table} d ORDER BY d.id DESC`));
+    : `SELECT d.*, NULL partner_name, ${att} attachments_n FROM ${c.params.table} d ORDER BY d.id DESC`));
+});
+// ---- scanned PDF attachments on documents ----
+const MAX_PDF = 10 * 1024 * 1024;
+route('POST', '/api/docs/:table/:id/attachment', (c) => new Promise(resolve => {
+  if (!requirePerm(c, 'create')) { bad(c.res, 403, 'Forbidden'); return resolve(); }
+  const t = c.params.table, id = Number(c.params.id);
+  if (!DOC_DEFS[t]) { bad(c.res, 404, 'Unknown doc type'); return resolve(); }
+  if (!one(`SELECT id FROM ${t} WHERE id=?`, id)) { bad(c.res, 404, 'Document not found'); return resolve(); }
+  const mime = String(c.req.headers['content-type'] || '').split(';')[0];
+  if (mime !== 'application/pdf') { bad(c.res, 415, 'Only PDF attachments allowed'); return resolve(); }
+  const chunks = []; let size = 0, dead = false;
+  c.req.on('data', ch => {
+    size += ch.length;
+    if (size > MAX_PDF) { dead = true; c.req.destroy(); resolve(); return; }
+    chunks.push(ch);
+  });
+  c.req.on('end', () => {
+    if (dead) return;
+    try {
+      const buf = Buffer.concat(chunks);
+      if (buf.slice(0, 4).toString('latin1') !== '%PDF') { bad(c.res, 422, 'File is not a valid PDF'); return resolve(); }
+      const dir = path.join(UPLOAD_DIR, 'attachments');
+      fs.mkdirSync(dir, { recursive: true });
+      const clean = String(c.req.headers['x-filename'] || 'scan.pdf').replace(/[^\w.\- ]/g, '_').slice(-80) || 'scan.pdf';
+      const name = `${t}-${id}-${Date.now()}-${clean}`;
+      fs.writeFileSync(path.join(dir, name), buf);
+      const urlPath = `/uploads/attachments/${name}`;
+      const info = run(`INSERT INTO doc_attachments(table_name,doc_id,filename,stored_path,size_bytes,uploaded_by)
+        VALUES(?,?,?,?,?,?)`, t, id, clean, urlPath, buf.length, (c.user && c.user.id) || 1);
+      audit((c.user && c.user.id) || 1, t, 'ATTACH', { entity: id, newv: clean });
+      ok(c.res, { id: Number(info.lastInsertRowid), url: urlPath, filename: clean });
+    } catch (e) { bad(c.res, 500, e.message); }
+    resolve();
+  });
+  c.req.on('error', () => { if (!dead) { bad(c.res, 500, 'upload failed'); resolve(); } });
+}));
+route('GET', '/api/docs/:table/:id/attachments', (c) => {
+  const t = c.params.table, id = Number(c.params.id);
+  if (!DOC_DEFS[t]) return bad(c.res, 404, 'Unknown doc type');
+  return ok(c.res, rows(`SELECT a.id,a.filename,a.stored_path,a.size_bytes,a.created_at,u.full_name uploaded_by_name
+    FROM doc_attachments a LEFT JOIN users u ON u.id=a.uploaded_by
+    WHERE a.table_name=? AND a.doc_id=? ORDER BY a.id DESC`, t, id));
+});
+route('DELETE', '/api/docs/:table/:id/attachment/:attId', async (c) => {
+  if (!requirePerm(c, 'workflow')) return;
+  const t = c.params.table;
+  const a = one(`SELECT * FROM doc_attachments WHERE table_name=? AND doc_id=? AND id=?`, t, Number(c.params.id), Number(c.params.attId));
+  if (!a) return bad(c.res, 404, 'Attachment not found');
+  try { fs.unlinkSync(path.join(UPLOAD_DIR, 'attachments', path.basename(a.stored_path))); } catch (e) { /* file already gone */ }
+  run(`DELETE FROM doc_attachments WHERE id=?`, a.id);
+  audit((c.user && c.user.id) || 1, t, 'ATTACH_DELETE', { entity: a.doc_id, old: a.filename });
+  ok(c.res, { deleted: a.id });
 });
 route('POST', '/api/purchase-orders', async (c) => {
   if (!requirePerm(c, 'create')) return;

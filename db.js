@@ -242,6 +242,13 @@ CREATE TABLE IF NOT EXISTS crm_activities (
   due_date TEXT, done_at TEXT DEFAULT (datetime('now')),
   done_by INTEGER REFERENCES users(id),
   CHECK((lead_id IS NOT NULL) OR (customer_id IS NOT NULL)));
+-- Scanned attachments (invoice/receipt PDFs) on any document
+CREATE TABLE IF NOT EXISTS doc_attachments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, table_name TEXT NOT NULL, doc_id INTEGER NOT NULL,
+  filename TEXT NOT NULL, stored_path TEXT NOT NULL UNIQUE, size_bytes INTEGER NOT NULL,
+  mime TEXT NOT NULL DEFAULT 'application/pdf', uploaded_by INTEGER REFERENCES users(id),
+  created_at TEXT DEFAULT (datetime('now')),
+  UNIQUE(table_name, doc_id, stored_path));
 `);
 
 const PPN_RATE = 0.11; // §9

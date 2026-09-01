@@ -211,9 +211,15 @@ function start(port) {
         const full = path.join(process.env.MTJ_DATA_DIR || path.join(__dirname, 'data'), 'uploads', rel);
         if (!fs.existsSync(full)) return send(res, 404, 'Not found', 'text/plain');
         const emime = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
-          '.gif': 'image/gif', '.webp': 'image/webp' }[path.extname(full).toLowerCase()];
+          '.gif': 'image/gif', '.webp': 'image/webp', '.pdf': 'application/pdf' }[path.extname(full).toLowerCase()];
+        if (full.includes('/attachments/') && !p.includes('/api/')) {
+          // attachment downloads require a session; enforce here (route is past auth gate already)
+          if (!user) return send(res, 401, 'Unauthorized', 'text/plain');
+        }
         return send(res, 200, fs.readFileSync(full), emime || 'application/octet-stream',
-          { 'Cache-Control': 'public, max-age=86400' });
+          emime === 'application/pdf'
+            ? { 'Content-Disposition': `inline; filename="${encodeURIComponent(path.basename(full))}"`, 'Cache-Control': 'private, max-age=86400' }
+            : { 'Cache-Control': 'public, max-age=86400' });
       }
       let file = p === '/' ? '/index.html' : p;
       file = file.replace(/\.\./g, '');

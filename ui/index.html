@@ -58,6 +58,9 @@ form .row{display:flex;gap:10px;margin-bottom:10px}form label{display:block;colo
 .b-SUBMITTED,.b-IN_PROGRESS,.b-REPAIRING{background:var(--soft);color:var(--txt)}
 .b-APPROVED,.b-CONTRACTED,.b-COMPLETED{background:#fff;color:var(--hi);border-color:var(--hi)}
 .b-review{background:#fff7e6;color:#b26a00;border-color:#f0c36d}
+.modalbox{position:fixed;inset:0;background:rgba(10,16,40,.55);display:none;z-index:20;align-items:flex-start;justify-content:center;padding:7vh 16px}
+.modalbox.open{display:flex}
+.modalcard{background:var(--card);color:var(--txt);border:1px solid var(--line);border-radius:12px;padding:16px 18px;max-width:640px;width:100%;max-height:78vh;overflow:auto;box-shadow:0 12px 40px rgba(8,14,38,.45)}
 .mut{color:var(--mut)}
 #toast{position:fixed;bottom:18px;right:18px;background:linear-gradient(135deg,#0e1a45,#1b3691);color:#fff;border:1px solid #1b3691;
 padding:10px 16px;border-radius:9px;display:none;font-size:13px;z-index:9;box-shadow:0 6px 18px rgba(14,26,69,.4)}

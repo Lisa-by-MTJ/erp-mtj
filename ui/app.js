@@ -248,7 +248,7 @@ views.docs = async () => {
         ? `<a href="/invoice-pdf/${encodeURIComponent(d.doc_no)}" target="_blank" rel="noopener" title="Open PDF">${esc(d.doc_no)} 📄</a>`
         : esc(d.doc_no)}</b></td><td>${esc(d.partner_name||d.from_name+' → '+d.to_name||'—')}</td><td>${d.po_date||d.receive_date||d.quote_date||d.so_date||d.transfer_date||''}</td>
         <td>${badge(d.status)}</td>
-        <td>${wfBtns(t, d)}</td></tr>`).join('') + '</table>';
+        <td>${wfBtns(t, d)}<button class="btn sm gray" title="Scanned attachments" onclick="attPanel('${t}',${d.id},'${esc(d.doc_no)}')">📎 ${d.attachments_n || ''}</button></td></tr>`).join('') + '</table>';
   }
   main.innerHTML = html;
 };
@@ -262,6 +262,54 @@ window.act = async (t, id, action) => {
   try { const r = await api(`/docs/${t}/${id}/${action}`, { method: 'POST' });
     toast(`${r.doc_no} → ${action.toUpperCase()} OK`); go(current); }
   catch (e) { toast(e.message, true); }
+};
+// ---- attachments modal (scanned PDFs on any document) ----
+window.attPanel = async (t, id, docNo) => {
+  let list = [];
+  try { list = await api(`/docs/${t}/${id}/attachments`); } catch (e) { toast(e.message, true); return; }
+  let m = $('#attmodal');
+  if (!m) {
+    m = document.createElement('div'); m.id = 'attmodal';
+    m.className = 'modalbox';
+    m.innerHTML = '<div class="modalcard"><div id="attbody"></div></div>';
+    document.body.appendChild(m);
+    m.addEventListener('click', ev => { if (ev.target === m) m.classList.remove('open'); });
+  }
+  const render = rows => `
+    <b>📎 Attachments — ${esc(docNo)}</b>
+    ${rows.length ? `<table style="margin-top:8px"><tr><th>File</th><th>By</th><th>When</th><th></th></tr>
+      ${rows.map(a => `<tr><td><a href="${a.stored_path}" target="_blank" rel="noopener">${esc(a.filename)}</a> <span class="mut">(${(a.size_bytes / 1024).toFixed(0)} KB)</span></td>
+        <td class="mut">${esc(a.uploaded_by_name || '')}</td><td class="mut">${(a.created_at || '').slice(0, 16)}</td>
+        <td><button class="btn sm warn" onclick="attDel('${t}',${id},${a.id},'${esc(docNo)}')">✕</button></td></tr>`).join('')}</table>`
+      : '<div class="mut" style="margin:8px 0">Belum ada lampiran.</div>'}
+    <div style="margin-top:10px">
+      <label class="btn sm">⬆ Upload PDF<input type="file" accept="application/pdf,.pdf" style="display:none" onchange="attUpload(event,'${t}',${id},'${esc(docNo)}')"></label>
+      <span class="mut" style="font-size:11px"> max 10 MB · PDF only</span>
+    </div>`;
+  $('#attbody').innerHTML = render(list);
+  m.classList.add('open');
+};
+window.attUpload = async (ev, t, id, docNo) => {
+  const f = ev.target.files[0]; if (!f) return;
+  if (f.size > 10 * 1024 * 1024) { toast('Maks 10 MB'); return; }
+  if (!/pdf$/i.test(f.name) && f.type !== 'application/pdf') { toast('Hanya PDF'); return; }
+  try {
+    const r = await fetch(`/api/docs/${t}/${id}/attachment`, {
+      method: 'POST', headers: { 'Content-Type': 'application/pdf', 'x-filename': f.name }, body: f });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || 'upload failed');
+    toast('PDF terlampir 📎');
+    attPanel(t, id, docNo); // repaint (re-fetches list)
+  } catch (e) { toast(e.message, true); }
+};
+window.attDel = async (t, id, attId, docNo) => {
+  if (!confirm('Hapus lampiran ini?')) return;
+  try {
+    await api(`/docs/${t}/${id}/attachment/${attId}`, { method: 'DELETE' });
+    toast('Lampiran dihapus');
+    const list = await api(`/docs/${t}/${id}/attachments`);
+    attPanel(t, id, docNo); // repaint via fresh fetch
+  } catch (e) { toast(e.message, true); }
 };
 
 views.newdoc = async () => {
