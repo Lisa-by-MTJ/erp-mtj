@@ -207,7 +207,7 @@ function start(port) {
           { 'Content-Disposition': `inline; filename="${encodeURIComponent(fn)}"`, 'Cache-Control': 'private, max-age=86400' });
       }
       if (p.startsWith('/uploads/')) { // product photos etc., stored under data/uploads
-        const rel = p.replace(/^\/uploads\//, '').replace(/\.\./g, '');
+        const rel = decodeURIComponent(p.replace(/^\/uploads\//, '')).replace(/\.\./g, '');
         const full = path.join(process.env.MTJ_DATA_DIR || path.join(__dirname, 'data'), 'uploads', rel);
         if (!fs.existsSync(full)) return send(res, 404, 'Not found', 'text/plain');
         const emime = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
