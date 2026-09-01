@@ -15,7 +15,8 @@ if (!USER || !PASS) {
 }
 const EXPECTED = 'Basic ' + Buffer.from(USER + ':' + PASS).toString('base64');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript',
-  '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon' };
+  '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon',
+  '.json': 'application/json' };
 
 // ---- stateless session tokens: <exp>.<hmac(secret, user+exp)> ----
 // Report fix: secret must not be derived from the Basic-Auth password (rotation/
@@ -72,6 +73,7 @@ function sessionUser(req) {
   return null;
 }
 const COOKIE = 'mtj_session';
+let MANIFEST = null; // doc_no -> pdf filename, loaded lazily from data/invoices/manifest.json
 function getCookie(req, name) {
   const raw = req.headers.cookie || '';
   for (const part of raw.split(';')) {
@@ -192,6 +194,18 @@ function start(port) {
         { user: user.username, full_name: user.full_name, role: user.role, id: user.id }));
 
       if (p.startsWith('/api/')) return api.handle(req, res, url, user);
+      if (p.startsWith('/invoice-pdf/')) { // historical ASJ invoice PDFs (session-gated)
+        const doc = decodeURIComponent(p.slice('/invoice-pdf/'.length));
+        if (!MANIFEST) {
+          try { MANIFEST = JSON.parse(fs.readFileSync(path.join(process.env.MTJ_DATA_DIR || path.join(__dirname, 'data'), 'invoices', 'manifest.json'), 'utf8')); }
+          catch (e) { MANIFEST = {}; }
+        }
+        const fn = /^[A-Za-z0-9\-]+$/.test(doc) ? MANIFEST[doc] : null;
+        const full = fn && path.join(process.env.MTJ_DATA_DIR || path.join(__dirname, 'data'), 'invoices', fn);
+        if (!fn || !/\.pdf$/i.test(fn) || !full || !fs.existsSync(full)) return send(res, 404, 'Invoice PDF not found', 'text/plain');
+        return send(res, 200, fs.readFileSync(full), 'application/pdf',
+          { 'Content-Disposition': `inline; filename="${encodeURIComponent(fn)}"`, 'Cache-Control': 'private, max-age=86400' });
+      }
       if (p.startsWith('/uploads/')) { // product photos etc., stored under data/uploads
         const rel = p.replace(/^\/uploads\//, '').replace(/\.\./g, '');
         const full = path.join(process.env.MTJ_DATA_DIR || path.join(__dirname, 'data'), 'uploads', rel);

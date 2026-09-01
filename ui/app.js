@@ -24,6 +24,10 @@ const kpiCard = (l, v, cls, jump, sub) =>
     ${sub ? `<div class="ksub">${sub}</div>` : ''}</div>`;
 
 let PRODUCTS = [], PARTNERS = [], WAREHOUSES = [], PROJECTS = [];
+// historical ASJ invoice PDFs: doc_no -> filename (fetch once; enables clickable 📄 in CRM/Docs)
+window.INVOICE_PDFS = {};
+fetch('/invoices.json').then(r => r.ok ? r.json() : {}).then(j => { window.INVOICE_PDFS = j || {}; })
+  .catch(() => { /* offline: invoice numbers render plain */ });
 
 // ---- collapsible sidebar (v3) ----
 window.sideToggle = () => {
@@ -240,7 +244,9 @@ views.docs = async () => {
     const list = await api('/docs/' + t);
     html += `<h2>${label}</h2><table><tr><th>Doc No</th><th>Partner / Route</th><th>Date</th>
       <th>Status</th><th>Actions</th></tr>` +
-      list.slice(0, 12).map(d => `<tr><td><b>${esc(d.doc_no)}</b></td><td>${esc(d.partner_name||d.from_name+' → '+d.to_name||'—')}</td><td>${d.po_date||d.receive_date||d.quote_date||d.so_date||d.transfer_date||''}</td>
+      list.slice(0, 12).map(d => `<tr><td><b>${t === 'sales_orders' && window.INVOICE_PDFS && INVOICE_PDFS[d.doc_no]
+        ? `<a href="/invoice-pdf/${encodeURIComponent(d.doc_no)}" target="_blank" rel="noopener" title="Open PDF">${esc(d.doc_no)} 📄</a>`
+        : esc(d.doc_no)}</b></td><td>${esc(d.partner_name||d.from_name+' → '+d.to_name||'—')}</td><td>${d.po_date||d.receive_date||d.quote_date||d.so_date||d.transfer_date||''}</td>
         <td>${badge(d.status)}</td>
         <td>${wfBtns(t, d)}</td></tr>`).join('') + '</table>';
   }
@@ -774,6 +780,9 @@ window.crmDone = async id => {
 views.crm360 = async id => {
   const d = await api('/crm/360/' + id);
   const c = d.customer;
+  const ino = r => (r.doc_no && /INV/.test(r.doc_no) && window.INVOICE_PDFS && INVOICE_PDFS[r.doc_no])
+    ? `<a href="/invoice-pdf/${encodeURIComponent(r.doc_no)}" target="_blank" rel="noopener" title="Open PDF"><b>${esc(r.doc_no)}</b> 📄</a>`
+    : `<b>${esc(r.doc_no)}</b>`;
   const tbl = (title, rowsL, cols) => `<h2>${title}</h2>
     <table><tr>${cols.map(x => `<th>${x[0]}</th>`).join('')}</tr>
     ${rowsL.map(r => `<tr>${cols.map(x => `<td>${x[1](r)}</td>`).join('')}</tr>`).join('')
@@ -787,8 +796,8 @@ views.crm360 = async id => {
     ${kpiCard('Outstanding (SO)', rp2(d.totals.outstanding.v), d.totals.outstanding.v > 0 ? 'amber' : '')}
     ${kpiCard('Projects', d.projects.length)}
   </div>
-  ${tbl('Quotations', d.quotations, [['Doc', r => `<b>${esc(r.doc_no)}</b>`], ['Date', r => r.quote_date], ['Total', r => rp2(r.grand_total)], ['Status', r => badge(r.status)]])}
-  ${tbl('Sales Orders', d.sales_orders, [['Doc', r => `<b>${esc(r.doc_no)}</b>`], ['Date', r => r.so_date], ['Type', r => r.sales_type], ['Total', r => rp2(r.grand_total)], ['Paid', r => rp2(r.paid_amount)], ['Status', r => badge(r.status)]])}
+  ${tbl('Quotations', d.quotations, [['Doc', ino], ['Date', r => r.quote_date], ['Total', r => rp2(r.grand_total)], ['Status', r => badge(r.status)]])}
+  ${tbl('Sales Orders', d.sales_orders, [['Doc', ino], ['Date', r => r.so_date], ['Type', r => r.sales_type], ['Total', r => rp2(r.grand_total)], ['Paid', r => rp2(r.paid_amount)], ['Status', r => badge(r.status)]])}
   ${tbl('Projects', d.projects, [['Code', r => `<b>${esc(r.project_code)}</b>`], ['Name', r => esc(r.name)], ['Contract', r => rp2(r.contract_value)], ['Status', r => badge(r.status)]])}
   ${tbl('Warranties', d.warranties, [['No', r => `<b>${esc(r.warranty_no)}</b>`], ['Start', r => r.warranty_start], ['End', r => r.warranty_end], ['Status', r => badge(r.status)]])}
   ${tbl('Service Orders', d.service_orders, [['Doc', r => `<b>${esc(r.doc_no)}</b>`], ['Received', r => r.received_at], ['Complaint', r => esc((r.complaint || '').slice(0, 40))], ['Status', r => badge(r.status)]])}
