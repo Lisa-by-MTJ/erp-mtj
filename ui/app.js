@@ -24,6 +24,14 @@ const kpiCard = (l, v, cls, jump, sub) =>
 
 let PRODUCTS = [], PARTNERS = [], WAREHOUSES = [], PROJECTS = [];
 
+// ---- collapsible sidebar (v3) ----
+window.sideToggle = () => {
+  const collapsed = document.body.classList.toggle('side-collapsed');
+  try { localStorage.setItem('side_collapsed', collapsed ? '1' : '0'); } catch (e) { /* private mode */ }
+  $('#side-toggle').textContent = collapsed ? '⟩' : '⟨';
+};
+try { if (localStorage.getItem('side_collapsed') === '1') document.addEventListener('DOMContentLoaded', () => window.sideToggle()); } catch (e) { /* ignore */ }
+
 // ---------------- views ----------------
 const views = {};
 
@@ -33,12 +41,22 @@ views.dash = async () => {
   const s = d.snapshot;
   window.dashPeriod = period;
   const zero = v => Number(v || 0) === 0 ? ' mut0' : '';
-  const bars = d.trend.map(t => {
-    const max = Math.max(...d.trend.map(x => x.sales), 1);
-    const h = Math.round(t.sales / max * 88) + 2;
-    const isCur = t.ym === new Date().toISOString().slice(0, 7);
-    return `<div class="bar${isCur ? ' cur' : ''}" style="height:${h}px"><span>${t.sales > 0 ? Math.round(t.sales / 1e6) + 'M' : ''}</span></div><i>${t.label}</i>`;
-  }).join('');
+  const plabel = { month: 'This Month', quarter: 'This Quarter', ytd: 'Year to Date', '30d': 'Last 30 Days' }[period];
+
+  // ---- helpers: spreadsheet cells ----
+  const kcell = (label, val, o = {}) => `<div class="kpicell"><div class="klbl">${label}</div>
+    <div class="kval${zero(val)}"${o.go ? ` onclick="go('${o.go}')"` : ''}>${val}</div>
+    ${o.evo || o.sub ? `<div class="kevo ${o.evo ? o.evo.cls : 'flat'}">${o.evo ? o.evo.txt : o.sub}</div>` : ''}</div>`;
+  const gcell = (html, o = {}) => `<div class="gcell${o.cls ? ' ' + o.cls : ''}"${o.span ? ` style="grid-column:span ${o.span}"` : ''}${o.go ? ` onclick="go('${o.go}')"` : ''}>${html}</div>`;
+  const sec = t => `<div class="ksec" style="grid-column:2/-1">${t}</div>`;
+  const evo = (cur, prev) => {
+    if (!prev) return { cls: 'flat', txt: 'no data for previous period' };
+    const p = Math.round((cur - prev) / prev * 1000) / 10;
+    return { cls: p > 0 ? 'up' : p < 0 ? 'down' : 'flat', txt: `${p > 0 ? '▲' : p < 0 ? '▼' : '■'} ${Math.abs(p)}% vs previous period` };
+  };
+  const sc = d.sales_compare || {};
+  const ordEvo = evo(d.sales_period.c, sc.prev_orders || 0);
+
   const actBtn = (t, id, st) => st === 'DRAFT'
     ? `<button class="btn sm gray" onclick="act('${t}',${id},'submit')">Submit</button>`
     : st === 'SUBMITTED'
@@ -46,7 +64,6 @@ views.dash = async () => {
     : `<button class="btn sm" onclick="act('${t}',${id},'post')">Post</button>`;
   const LINK = { quotations: 'docs', sales_orders: 'docs', purchase_orders: 'docs',
     receivings: 'docs', stock_transfers: 'transfer' };
-  const plabel = { month: 'This Month', quarter: 'This Quarter', ytd: 'Year to Date', '30d': 'Last 30 Days' }[period];
   const acts = d.action_items.map(a => `<tr>
     <td><a href="#" onclick="go('${LINK[a.table] || 'docs'}');return false" style="color:inherit"><b>${esc(a.doc_no)}</b></a></td>
     <td>${a.label}</td><td class="mut">${a.date || ''}</td><td>${badge(a.status)}</td>
@@ -58,62 +75,90 @@ views.dash = async () => {
     <div class="mut ftime">${esc(a.at)}</div></div></div>`).join('');
   const per = ['month', 'quarter', 'ytd', '30d'].map(p =>
     `<button class="btn sm ${p === period ? '' : 'gray'}" onclick="window.dashPeriod='${p}';views.dash()">${{ month: 'Month', quarter: 'Quarter', ytd: 'YTD', '30d': '30d' }[p]}</button>`).join('');
+
+  // ---- 12-month mini chart ----
+  const max = Math.max(...d.trend.map(x => x.sales), 1);
+  const bars = d.trend.map(t => {
+    const h = Math.round(t.sales / max * 60) + 2;
+    const isCur = t.ym === new Date().toISOString().slice(0, 7);
+    return `<div class="bar${isCur ? ' cur' : ''}" style="height:${h}px"><span>${t.sales > 0 ? Math.round(t.sales / 1e6) + 'M' : ''}</span></div><i>${t.label}</i>`;
+  }).join('');
+  const tops = d.top_products.map(p => `<div>📦 <b>${esc(p.code)}</b> · ${p.qty} pcs — ${fmt(p.revenue)}</div>`).join('') || '<span class="dim">no posted sales yet</span>';
+  const custs = d.top_customers.map(c => `<div>🏢 <b>${esc(c.name)}</b> · ${c.orders} SO — ${fmt(c.revenue)}</div>`).join('') || '<span class="dim">no posted sales yet</span>';
+
   main.innerHTML = `
-  <div class="welcome"><img src="/logo.png" alt="PT MTJ">
-    <div><h1>Welcome to MTJ Channel Manager</h1>
-    <div class="wsub">PT Monalisa Tunggal Jaya — Your One-Stop Partner for Professional Lighting, Audio &amp; LED Visual Systems</div>
-    <div class="tagline">“Your Potential. Our Passion.”</div></div>
-  </div>
-  <div class="dashhead"><h2 style="border:none;margin:0">Needs Your Action (${d.action_items.length})</h2>
+  <div class="dashhead"><h2 style="border:none;margin:0">📊 Management Dashboard</h2>
     <div class="pbtns">${per}</div></div>
-  ${d.action_items.length ? `<table class="acts"><tr><th>Doc</th><th>Type</th><th>Date</th><th>Status</th>
-    <th class="money">Amount</th><th>Actions</th></tr>${acts}</table>`
-    : '<div class="mut" style="margin:2px 0 6px">Nothing waiting — queue is clear. 🎉</div>'}
-  <h2>Sales — ${plabel}</h2><div class="grid">
-    ${kpiCard('Sales ' + plabel, fmt(d.sales_period.s), 'teal', null,
-      `${d.sales_period.c} posted order(s) · Retail ${fmt(d.sales_period.retail)} · Project ${fmt(d.sales_period.project)} · PPN ${fmt(d.sales_period.ppn)}`)}
-    ${kpiCard('Outstanding Project Billing', fmt(s.outstanding_billing), s.outstanding_billing > 0 ? 'amber' : '', 'projects')}
-  </div>
-  <div class="cols2">
-    <div><h2 style="margin-top:14px">12-Month Trend</h2><div class="chartbox"><div class="bars">${bars}</div></div></div>
-    <div><h2 style="margin-top:14px">Recent Activity</h2><div class="feedbox">${feed || '<div class="mut">no activity yet</div>'}</div></div>
-  </div>
-  <h2>Stock &amp; Inventory</h2><div class="grid">
-    ${kpiCard('Stock Value (avg cost)', fmt(s.stock_value), '', 'stock')}
-    ${kpiCard('Available Stock', s.available_stock, '', 'stock')}
-    ${kpiCard('Low Stock Items', s.low_stock, s.low_stock > 0 ? 'amber' : '', 'stock')}
-    ${kpiCard('Reserved', s.reserved_stock, '', 'stock')}
-  </div>
-  ${d.low_stock.length ? `<table><tr><th>Code</th><th>Product</th><th>Warehouse</th>
-    <th class="money">Available</th><th class="money">Reorder Pt</th></tr>
-    ${d.low_stock.map(r => `<tr><td><a href="#" onclick="go('item-${r.id}');return false" style="color:inherit"><b>${esc(r.code)}</b></a></td>
-      <td>${esc(r.name)} <span class="mut">${esc(r.brand || '')}</span></td><td>${esc(r.wh_name)}</td>
-      <td class="money"><b class="low">${r.available}</b></td><td class="money">${r.reorder_point}</td></tr>`).join('')}</table>`
-    : ''}
-  <h2>Purchasing</h2><div class="grid">
-    ${kpiCard('Purchase Value (open+posted)', fmt(s.purchase_value), '', 'docs')}
-    ${kpiCard('Local Purchase', fmt(s.local_purchase), zero(s.local_purchase), 'docs')}
-    ${kpiCard('Import Purchase', fmt(s.import_purchase), zero(s.import_purchase), 'docs')}
-  </div>
-  <div class="cols2">
-    <div><h2 style="margin-top:14px">Billing Aging (Project)</h2>
-      ${s.outstanding_billing > 0 || d.billing_aging.total > 0 ? `<div class="grid" style="grid-template-columns:repeat(2,1fr)">
-      ${d.billing_aging.buckets.map(b => kpiCard(b.label, fmt(b.amount), b.k === 'd90' && b.amount > 0 ? 'amber' : zero(b.amount).trim(), null)).join('')}
-      </div>` : '<div class="mut">No open project billings yet.</div>'}</div>
-    <div><h2 style="margin-top:14px">Service · Warranty · Field</h2><div class="grid" style="grid-template-columns:repeat(2,1fr)">
-      ${kpiCard('Open Service', s.open_service, zero(s.open_service), 'warranty')}
-      ${kpiCard('Completed Service', s.completed_service, '', 'warranty')}
-      ${kpiCard('Active Warranty', s.active_warranty, '', 'warranty')}
-      ${kpiCard('Warranty Claims', s.warranty_claims, zero(s.warranty_claims), 'warranty')}
-      ${kpiCard('Open Work Orders', s.open_work_orders, zero(s.open_work_orders), 'warranty')}
-      ${kpiCard('Active Projects', s.active_projects, '', 'projects')}
-    </div></div>
-  </div>
-  <h2>CRM Pipeline</h2><div class="grid">
-    ${kpiCard('Open Leads', d.crm.open_leads, '', 'crm', 'Pipeline value ' + fmt(d.crm.open_value))}
-    ${kpiCard('Won', d.crm.won, '', 'crm')}
-    ${kpiCard('Lost', d.crm.lost, 'mut0', 'crm')}
-    ${kpiCard('Follow-ups due ≤7d', d.crm.followups_due, d.crm.followups_due > 0 ? 'amber' : 'mut0', 'crm')}
+  <div class="sheetwrap">
+    <div class="sheetname"><span class="on">Dashboard</span><span class="adds" title="read-only view">＋</span></div>
+    <div class="grid-ruler"><b></b><b>A</b><b>B</b><b>C</b><b>D</b><b>E</b><b>F</b></div>
+
+    <div class="srow"><div class="rn">1</div>${gcell(
+      `<div style="display:flex;align-items:center;gap:12px"><img src="/logo.png" style="width:34px" alt="PT MTJ">
+       <div><b style="font-size:14px;color:var(--hi)">MTJ Channel Manager — ${plabel}</b>
+       <div class="mut" style="font-size:11px">PT Monalisa Tunggal Jaya · “Your Potential. Our Passion.” · data langsung dari modul ERP</div></div></div>`, { span: 6 })}</div>
+
+    <div class="srow"><div class="rn">2</div>${sec('Sales')}</div>
+    <div class="srow"><div class="rn">3</div>
+      ${kcell('Sales ' + plabel, fmt(sc.cur ?? d.sales_period.s), { evo: evo(sc.cur || 0, sc.prev || 0) })}
+      ${kcell('Posted Orders', d.sales_period.c, { evo: ordEvo })}
+      ${kcell('Retail', fmt(d.sales_period.retail))}
+      ${kcell('Project', fmt(d.sales_period.project))}
+      ${kcell('PPN', fmt(d.sales_period.ppn))}
+      ${kcell('Outstanding Billing', fmt(s.outstanding_billing), { go: 'projects' })}
+    </div>
+
+    <div class="srow"><div class="rn">4</div>${sec('Perlu Tindakan — ' + d.action_items.length + ' dokumen')}</div>
+    <div class="srow"><div class="rn">5</div>
+      ${gcell(d.action_items.length
+        ? `<table><tr><th>Doc</th><th>Type</th><th>Date</th><th>Status</th><th class="money">Amount</th><th>Action</th></tr>${acts}</table>`
+        : '<span class="dim">Tidak ada dokumen menunggu — antrian bersih. 🎉</span>', { span: 6, cls: 'dim' })}
+    </div>
+
+    <div class="srow"><div class="rn">6</div>${sec('Stock &amp; Purchasing')}</div>
+    <div class="srow"><div class="rn">7</div>
+      ${kcell('Stock Value (avg cost)', fmt(s.stock_value), { go: 'stock' })}
+      ${kcell('Available Stock', s.available_stock, { go: 'stock' })}
+      ${kcell('Low Stock Items', s.low_stock, { go: 'stock', evo: s.low_stock > 0 ? { cls: 'down', txt: '▲ below reorder point — check watchlist' } : { cls: 'flat', txt: 'all above reorder point' } })}
+      ${kcell('Reserved', s.reserved_stock, { go: 'stock' })}
+      ${kcell('Purchase Value', fmt(s.purchase_value), { go: 'docs' })}
+      ${kcell('Local / Import', fmt(s.local_purchase) + ' / ' + fmt(s.import_purchase), { go: 'docs' })}
+    </div>
+
+    <div class="srow"><div class="rn">8</div>${sec('Analisis')}</div>
+    <div class="srow"><div class="rn">9</div>
+      ${gcell(`<div class="klbl" style="color:var(--mut);font-size:10.5px;text-transform:uppercase;letter-spacing:.07em">12-Month Sales Trend</div><div class="minibars">${bars}</div>`, { span: 4 })}
+      ${gcell(`<div class="klbl" style="color:var(--mut);font-size:10.5px;text-transform:uppercase;letter-spacing:.07em">Top Products</div><div style="font-size:11.5px;line-height:1.9">${tops}</div>`, { span: 2 })}
+    </div>
+    <div class="srow"><div class="rn">10</div>
+      ${gcell(`<div class="klbl" style="color:var(--mut);font-size:10.5px;text-transform:uppercase;letter-spacing:.07em">Top Customers</div><div style="font-size:11.5px;line-height:1.9">${custs}</div>`, { span: 2 })}
+      ${gcell(`<div class="klbl" style="color:var(--mut);font-size:10.5px;text-transform:uppercase;letter-spacing:.07em">Recent Activity</div><div class="feedbox" style="border:none;padding:2px 0;max-height:150px">${feed || '<span class="dim">no activity yet</span>'}</div>`, { span: 4 })}
+    </div>
+    ${d.low_stock.length ? `<div class="srow"><div class="rn">11</div>${gcell(
+      `<table><tr><th>Code</th><th>Product</th><th>Warehouse</th><th class="money">Available</th><th class="money">Reorder Pt</th></tr>
+      ${d.low_stock.map(r => `<tr><td><a href="#" onclick="go('item-${r.id}');return false" style="color:inherit"><b>${esc(r.code)}</b></a></td>
+        <td>${esc(r.name)} <span class="mut">${esc(r.brand || '')}</span></td><td>${esc(r.wh_name)}</td>
+        <td class="money"><b class="low">${r.available}</b></td><td class="money">${r.reorder_point}</td></tr>`).join('')}</table>`, { span: 6 })}</div>` : ''}
+
+    <div class="srow"><div class="rn">12</div>${sec('Service · Warranty · Field')}</div>
+    <div class="srow"><div class="rn">13</div>
+      ${kcell('Open Service', s.open_service, { go: 'warranty' })}
+      ${kcell('Completed Service', s.completed_service, { go: 'warranty' })}
+      ${kcell('Active Warranty', s.active_warranty, { go: 'warranty' })}
+      ${kcell('Warranty Claims', s.warranty_claims, { go: 'warranty' })}
+      ${kcell('Open Work Orders', s.open_work_orders, { go: 'warranty' })}
+      ${kcell('Active Projects', s.active_projects, { go: 'projects' })}
+    </div>
+
+    <div class="srow"><div class="rn">14</div>${sec('CRM Pipeline')}</div>
+    <div class="srow"><div class="rn">15</div>
+      ${kcell('Open Leads', d.crm.open_leads, { go: 'crm', sub: 'Pipeline value ' + fmt(d.crm.open_value) })}
+      ${kcell('Won', d.crm.won, { go: 'crm' })}
+      ${kcell('Lost', d.crm.lost, { go: 'crm' })}
+      ${kcell('Follow-ups ≤7d', d.crm.followups_due, { go: 'crm', evo: d.crm.followups_due > 0 ? { cls: 'down', txt: '▲ due this week' } : { cls: 'flat', txt: 'none due' } })}
+      ${gcell('<span class="dim"></span>')}
+      ${gcell('<span class="dim"></span>')}
+    </div>
   </div>`;
 };
 

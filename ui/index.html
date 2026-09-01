@@ -74,6 +74,53 @@ padding:10px 16px;border-radius:9px;display:none;font-size:13px;z-index:9;box-sh
 #logout{background:transparent;border:1px solid var(--line);color:var(--mut);border-radius:7px;
 padding:5px 10px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;margin-left:8px}
 #logout:hover{border-color:var(--hi);color:var(--hi)}
+/* ---- Collapsible sidebar ---- */
+nav{width:220px;transition:width .18s ease;overflow:hidden;white-space:nowrap}
+nav a span.lbl{display:inline}
+body.side-collapsed nav{width:58px}
+body.side-collapsed nav a{padding:9px 0;text-align:center;border-left-width:0;font-size:15px}
+body.side-collapsed nav a span.lbl{display:none}
+body.side-collapsed .logo span.txt{display:none}
+body.side-collapsed .logo{justify-content:center;padding:12px 0 16px}
+#side-toggle{position:sticky;top:0;float:right;background:transparent;border:none;color:#aab6e3;font-size:15px;
+  cursor:pointer;padding:6px 10px;margin:2px 6px 0 0;border-radius:7px;line-height:1}
+#side-toggle:hover{background:rgba(255,255,255,.12);color:#fff}
+/* ---- Dashboard v3: Odoo-spreadsheet canvas ---- */
+.sheetwrap{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:0;overflow:hidden;box-shadow:0 2px 10px rgba(14,26,69,.06)}
+.sheetname{display:flex;gap:2px;padding:7px 10px 0;background:linear-gradient(180deg,#eef1f9,#e7ebf5);border-bottom:1px solid var(--line)}
+.sheetname span{font-size:11.5px;padding:5px 14px;border:1px solid var(--line);border-bottom:none;border-radius:8px 8px 0 0;background:#fff;color:var(--mut);cursor:pointer;font-weight:600}
+.sheetname span.on{color:var(--hi);border-bottom:1px solid #fff;margin-bottom:-1px}
+.sheetname .adds{border:none;background:transparent;font-weight:400}
+.sheetname .adds:hover{color:var(--hi)}
+.grid-ruler{display:grid;grid-template-columns:34px repeat(6,minmax(120px,1fr));background:#f4f6fb;font-size:10px;color:#9aa1b8;border-bottom:1px solid var(--line)}
+.grid-ruler b{font-weight:600;text-align:center;padding:3px 0;border-left:1px solid var(--line);letter-spacing:.06em}
+.grid-ruler b:first-child{border-left:none}
+.srow{display:grid;grid-template-columns:34px repeat(6,minmax(120px,1fr))}
+.srow>.rn{font-size:10px;color:#9aa1b8;text-align:center;padding:4px 0;border-right:1px solid var(--line);background:#f4f6fb}
+.srow>div:not(.rn){border-right:1px solid #e6e9f2;border-bottom:1px solid #e6e9f2;padding:7px 10px;min-height:34px;font-size:12.5px}
+.kpicell{background:#fff}
+.kpicell .klbl{color:var(--mut);font-size:10.5px;text-transform:uppercase;letter-spacing:.07em}
+.kpicell .kval{font-size:19px;font-weight:700;margin-top:3px;font-variant-numeric:tabular-nums;
+  background:linear-gradient(120deg,#0e1a45,#2f56c4);-webkit-background-clip:text;background-clip:text;color:transparent;cursor:pointer}
+.kpicell .kval:hover{text-decoration:underline}
+.kpicell .kevo{font-size:11px;margin-top:2px;font-weight:600}
+.kevo.up{color:#1b7a3d}.kevo.down{color:#8a1c1c}.kevo.flat{color:var(--mut)}
+.ksec{font-size:11px;font-weight:800;letter-spacing:.1em;color:#fff;background:linear-gradient(120deg,#1b3691,#2f56c4);
+  padding:7px 10px;border-right:1px solid #e6e9f2;border-bottom:1px solid #e6e9f2;text-transform:uppercase}
+.gcell{color:var(--txt)}
+.gcell.dim{color:var(--mut)}
+.gcell b{color:var(--hi)}
+.gcell.link{cursor:pointer;font-weight:600;color:var(--hi)}
+.gcell.link:hover{text-decoration:underline}
+.sheetwrap table{border:none;border-radius:0}
+.sheetwrap th{background:#fff;font-size:10.5px;padding:6px 9px;border-bottom:1px solid var(--line);border-right:1px solid #e6e9f2}
+.sheetwrap td{padding:6px 9px;font-size:12px;border-right:1px solid #e6e9f2}
+.minibars{display:flex;align-items:flex-end;gap:5px;height:86px;padding:8px 6px 2px}
+.minibars .bar{flex:1;background:linear-gradient(180deg,#2f56c4,#1b3691);border-radius:3px 3px 0 0;min-height:2px;position:relative}
+.minibars .bar.cur{background:linear-gradient(180deg,#ff8a2a,#e56f10)}
+.minibars .bar span{position:absolute;top:-15px;left:50%;transform:translateX(-50%);font-size:9px;color:var(--hi);font-weight:600;white-space:nowrap;display:none}
+.minibars .bar:hover span,.minibars .bar.cur span{display:block}
+.minibars i{flex:1;text-align:center;font-style:normal;font-size:9px;color:var(--mut);margin-top:3px}
 .dashhead{display:flex;align-items:center;justify-content:space-between;margin:20px 0 8px}
 .dashhead h2{font-size:13px;color:var(--hi);letter-spacing:.1em}
 .pbtns{display:flex;gap:6px}
@@ -144,20 +191,21 @@ table.acts td{padding:7px 10px}
 </head>
 <body>
 <nav id="nav">
- <div class="logo"><img src="/logo.png" alt="PT MTJ"><span><b>MTJ CHANNEL MANAGER</b><small>PT Monalisa Tunggal Jaya · est. 1980</small></span></div>
- <a data-v="dash" class="on">📊 Management Dashboard</a>
- <a data-v="stock">📦 Stock &amp; Inventory</a>
- <a data-v="transfer">🔁 Transfer Gudang</a>
- <a data-v="warehouses">🏬 Warehouses / Gudang</a>
- <a data-v="docs">🧾 Purchase &amp; Sales Docs</a>
- <a data-v="newdoc">➕ New Document</a>
- <a data-v="projects">🏗️ Projects</a>
- <a data-v="delivery">🚚 Delivery / Surat Jalan</a>
- <a data-v="crm">🤝 CRM</a>
- <a data-v="warranty">🛡️ Warranty &amp; Service</a>
- <a data-v="profit">💰 Profitability</a>
- <a data-v="audit">🔐 Audit Trail</a>
- <a data-v="users" style="display:none">👥 Users &amp; Access</a>
+ <div class="logo"><img src="/logo.png" alt="PT MTJ"><span class="txt"><b>MTJ CHANNEL MANAGER</b><small>PT Monalisa Tunggal Jaya · est. 1980</small></span></div>
+ <button id="side-toggle" title="Sembunyikan / buka sidebar" onclick="sideToggle()">⟨</button>
+ <a data-v="dash" class="on">📊 <span class="lbl">Management Dashboard</span></a>
+ <a data-v="stock">📦 <span class="lbl">Stock &amp; Inventory</span></a>
+ <a data-v="transfer">🔁 <span class="lbl">Transfer Gudang</span></a>
+ <a data-v="warehouses">🏬 <span class="lbl">Warehouses / Gudang</span></a>
+ <a data-v="docs">🧾 <span class="lbl">Purchase &amp; Sales Docs</span></a>
+ <a data-v="newdoc">➕ <span class="lbl">New Document</span></a>
+ <a data-v="projects">🏗️ <span class="lbl">Projects</span></a>
+ <a data-v="delivery">🚚 <span class="lbl">Delivery / Surat Jalan</span></a>
+ <a data-v="crm">🤝 <span class="lbl">CRM</span></a>
+ <a data-v="warranty">🛡️ <span class="lbl">Warranty &amp; Service</span></a>
+ <a data-v="profit">💰 <span class="lbl">Profitability</span></a>
+ <a data-v="audit">🔐 <span class="lbl">Audit Trail</span></a>
+ <a data-v="users" style="display:none">👥 <span class="lbl">Users &amp; Access</span></a>
 </nav>
 <main id="main"></main>
 <div id="toast"></div>

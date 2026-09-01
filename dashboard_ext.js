@@ -89,6 +89,28 @@ function salesByPeriod(period) {
     FROM sales_orders WHERE status = 'POSTED' AND so_date >= ?`, from)[0];
 }
 
+// ---- KPI evolution vs the previous comparable period (dashboard v3) ----
+function prevPeriodStart(period) {
+  const now = new Date();
+  if (period === 'month') return new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().slice(0, 10);
+  if (period === 'quarter') {
+    const q = Math.floor(now.getMonth() / 3) * 3;
+    return new Date(now.getFullYear(), q - 3, 1).toISOString().slice(0, 10);
+  }
+  if (period === '30d') return new Date(now.getTime() - 60 * 864e5).toISOString().slice(0, 10);
+  return (now.getFullYear() - 1) + '-01-01';
+}
+function salesComparison(period) {
+  const from = periodStart(period), pfrom = prevPeriodStart(period);
+  const prev = rows(`SELECT COALESCE(SUM(grand_total),0) s, COUNT(*) c
+    FROM sales_orders WHERE status='POSTED' AND so_date >= ? AND so_date < ?`, pfrom, from)[0];
+  const cur = salesByPeriod(period);
+  const delta = prev.s > 0
+    ? Math.round((cur.s - prev.s) / prev.s * 1000) / 10
+    : (cur.s > 0 ? 100 : 0);
+  return { cur: cur.s, prev: prev.s, prev_orders: prev.c, delta_pct: delta };
+}
+
 // ---- P2: project billing aging buckets (days past due) ----
 function billingAging() {
   const buckets = [{ k: 'cur', label: 'Not due', min: -99999, max: 0 },
@@ -111,5 +133,5 @@ function billingAging() {
   res.buckets = buckets.map(x => ({ k: x.k, label: x.label, amount: res.buckets[x.k] || 0 }));
   return res;
 }
-module.exports = { actionItems, activity, lowStock, trend, topProducts, topCustomers, salesByPeriod, billingAging, periodStart };
+module.exports = { actionItems, activity, lowStock, trend, topProducts, topCustomers, salesByPeriod, salesComparison, billingAging, periodStart };
 
