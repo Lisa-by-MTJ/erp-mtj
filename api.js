@@ -340,15 +340,23 @@ const DOC_DEFS = {
   delivery_orders:   { prefix: 'DO', lc: 'delivery_order_lines', fk: 'delivery_order_id' },
   stock_transfers:   { prefix: 'TRF', lc: 'stock_transfer_lines', fk: 'stock_transfer_id' },
 };
+// column holding the business partner per doc table (NULL = no partner on the doc)
+const DOC_PARTNER_COL = {
+  purchase_requests: 'supplier_id', purchase_orders: 'supplier_id',
+  receivings: 'partner_id', delivery_orders: null,
+  quotations: 'customer_id', sales_orders: 'customer_id',
+};
 route('GET', '/api/docs/:table', (c) => {
   if (!DOC_DEFS[c.params.table]) return bad(c.res, 404, 'Unknown doc type');
   if (c.params.table === 'stock_transfers') return ok(c.res, rows(`
     SELECT t.*, wf.name from_name, wt.name to_name, NULL partner_name FROM stock_transfers t
     JOIN warehouses wf ON wf.id=t.from_warehouse_id JOIN warehouses wt ON wt.id=t.to_warehouse_id
     ORDER BY t.id DESC`));
-  return ok(c.res, rows(`SELECT d.*, bp.name partner_name FROM ${c.params.table} d
-    LEFT JOIN business_partners bp ON bp.id=d.supplier_id OR bp.id=d.customer_id
-    ORDER BY d.id DESC`));
+  const col = DOC_PARTNER_COL[c.params.table];
+  return ok(c.res, rows(col
+    ? `SELECT d.*, bp.name partner_name FROM ${c.params.table} d
+       LEFT JOIN business_partners bp ON bp.id=d.${col} ORDER BY d.id DESC`
+    : `SELECT d.*, NULL partner_name FROM ${c.params.table} d ORDER BY d.id DESC`));
 });
 route('POST', '/api/purchase-orders', async (c) => {
   if (!requirePerm(c, 'create')) return;
