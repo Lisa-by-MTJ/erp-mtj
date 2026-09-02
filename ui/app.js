@@ -228,12 +228,15 @@ views.stock = async () => {
   <h2>Recent Movements (§20)</h2>
   ${mvHtml}
 `;
-  const bmap = new Map(); // UPPER key -> display label (most frequent original casing)
+  const bmap = new Map(); // UPPER key -> display label (prefer the bare brand spelling)
   for (const r of rows) {
     if (!r.brand) continue;
-    const k = r.brand.toUpperCase();
+    let k = r.brand.toUpperCase();
+    // merge family spellings into one filter: PROEL SOUND/STAGE/EIKON... -> PROEL
+    const fam = k.match(/^(PROEL|AZTEC|MARTIN|EIKON|ROBE|CHAUVET|SOROT|OSRAM|HILL AUDIO|CELTO|CORNERED|RESOLUME|MADRIX)(\s|$)/);
+    if (fam) k = fam[1];
     const cur = bmap.get(k);
-    if (cur) { cur.n++; if (r.brand === k && cur.disp !== k) cur.disp = r.brand; }
+    if (cur) { cur.n++; if (r.brand.toUpperCase() === k && cur.disp !== k) cur.disp = r.brand; }
     else bmap.set(k, { disp: r.brand, n: 1 });
   }
   const brands = [...bmap.entries()].sort((a, b) => a[0].localeCompare(b[0]));
@@ -242,11 +245,16 @@ views.stock = async () => {
   window.__stockRows = rows;
   renderStock();
 };
+const brandKey = s => {
+  const k = (s || '').toUpperCase();
+  const fam = k.match(/^(PROEL|AZTEC|MARTIN|EIKON|ROBE|CHAUVET|SOROT|OSRAM|HILL AUDIO|CELTO|CORNERED|RESOLUME|MADRIX)(\s|$)/);
+  return fam ? fam[1] : k;
+};
 window.renderStock = () => {
   const tb = $('#st-tbody'); if (!tb || !window.__stockRows) return;
   const brand = $('#st-brand').value, sort = $('#st-sort').value, q = $('#st-q').value.toLowerCase();
   let list = window.__stockRows.filter(r =>
-    (!brand || (r.brand || '').toUpperCase() === brand) &&
+    (!brand || brandKey(r.brand) === brand) &&
     (!q || (r.code + ' ' + (r.name||'')).toLowerCase().includes(q)));
   const val = r => r.stock_value || 0;
   if (sort === 'val-asc') list.sort((a,b) => val(a) - val(b));
