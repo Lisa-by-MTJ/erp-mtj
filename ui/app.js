@@ -211,15 +211,53 @@ views.stock = async () => {
     </form>
     <div class="mut" style="font-size:11px">* wajib. Barang baru belum punya stok — masukkan lewat Purchase Order → Receiving.</div>
   </div>
+  <div class="row" style="margin:8px 0">
+    <div style="flex:1"><label>Brand</label><select id="st-brand" onchange="renderStock()">
+      <option value="">All brands</option></select></div>
+    <div style="flex:1"><label>Sort</label><select id="st-sort" onchange="renderStock()">
+      <option value="code">Code (default)</option>
+      <option value="brand">Brand A→Z</option>
+      <option value="val-asc">Value: low → highest</option>
+      <option value="val-desc">Value: highest → low</option>
+      <option value="qty-desc">Qty: most first</option></select></div>
+    <div style="flex:2"><label>Cari</label><input id="st-q" placeholder="code / nama barang…" oninput="renderStock()"></div>
+  </div>
   <table><tr><th>Code</th><th>Product</th><th>EAN</th><th>Warehouse</th><th class="money">Physical</th>
   <th class="money">Reserved</th><th class="money">Available</th><th class="money">Value</th></tr>
-  ${rows.map(r => `<tr><td><a href="#" onclick="go('item-${r.product_id}');return false" style="color:inherit"><b>${esc(r.code)}</b></a></td><td>${esc(r.name)} <span class="mut">${esc(r.brand||'')}</span></td><td class="mut">${esc(r.barcode||'—')}</td><td>${esc(r.wh_name)}</td>
-    <td class="money">${r.physical}</td><td class="money">${r.reserved}</td>
-    <td class="money"><b class="${r.available<=0?'low':'ok'}">${r.available}</b></td>
-    <td class="money">${fmt(r.stock_value)}</td></tr>`).join('')}</table>
+  <tbody id="st-tbody"></tbody></table>
   <h2>Recent Movements (§20)</h2>
   ${mvHtml}
 `;
+  const bmap = new Map(); // UPPER key -> display label (most frequent original casing)
+  for (const r of rows) {
+    if (!r.brand) continue;
+    const k = r.brand.toUpperCase();
+    const cur = bmap.get(k);
+    if (cur) { cur.n++; if (r.brand === k && cur.disp !== k) cur.disp = r.brand; }
+    else bmap.set(k, { disp: r.brand, n: 1 });
+  }
+  const brands = [...bmap.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  $('#st-brand').innerHTML = '<option value="">All brands</option>' +
+    brands.map(([k, v]) => `<option value="${esc(k)}">${esc(v.disp)}</option>`).join('');
+  window.__stockRows = rows;
+  renderStock();
+};
+window.renderStock = () => {
+  const tb = $('#st-tbody'); if (!tb || !window.__stockRows) return;
+  const brand = $('#st-brand').value, sort = $('#st-sort').value, q = $('#st-q').value.toLowerCase();
+  let list = window.__stockRows.filter(r =>
+    (!brand || (r.brand || '').toUpperCase() === brand) &&
+    (!q || (r.code + ' ' + (r.name||'')).toLowerCase().includes(q)));
+  const val = r => r.stock_value || 0;
+  if (sort === 'val-asc') list.sort((a,b) => val(a) - val(b));
+  else if (sort === 'val-desc') list.sort((a,b) => val(b) - val(a));
+  else if (sort === 'brand') list.sort((a,b) => (a.brand||'~').localeCompare(b.brand||'~') || a.code.localeCompare(b.code));
+  else if (sort === 'qty-desc') list.sort((a,b) => b.physical - a.physical);
+  tb.innerHTML = list.slice(0, 500).map(r => `<tr><td><a href="#" onclick="go('item-${r.product_id}');return false" style="color:inherit"><b>${esc(r.code)}</b></a></td><td>${esc(r.name)} <span class="mut">${esc(r.brand||'')}</span></td><td class="mut">${esc(r.barcode||'—')}</td><td>${esc(r.wh_name)}</td>
+    <td class="money">${r.physical}</td><td class="money">${r.reserved}</td>
+    <td class="money"><b class="${r.available<=0?'low':'ok'}">${r.available}</b></td>
+    <td class="money">${fmt(r.stock_value)}</td></tr>`).join('') +
+    (list.length > 500 ? `<tr><td colspan="8" class="mut">… ${list.length - 500} baris lagi — persempit filter</td></tr>` : '');
 };
 window.addProduct = async ev => {
   ev.preventDefault();
