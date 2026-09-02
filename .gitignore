@@ -16,3 +16,6 @@ package-lock.json
 .env.*
 !.env.example
 # Invoice PDFs served from bind-mounted data dir, never in git
+
+# parsed PDF data (PII: customer names/phones/serials) — keep local, never commit
+scripts/do-import/do_parsed.json
