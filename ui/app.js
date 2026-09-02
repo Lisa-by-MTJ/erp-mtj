@@ -261,12 +261,37 @@ window.renderStock = () => {
   else if (sort === 'val-desc') list.sort((a,b) => val(b) - val(a));
   else if (sort === 'brand') list.sort((a,b) => (a.brand||'~').localeCompare(b.brand||'~') || a.code.localeCompare(b.code));
   else if (sort === 'qty-desc') list.sort((a,b) => b.physical - a.physical);
-  tb.innerHTML = list.slice(0, 500).map(r => { const th = r.photo_url ? r.photo_url.replace('/products/', '/products/_t/') : ''; return `<tr><td><a href="#" onclick="go('item-${r.product_id}');return false" style="color:inherit"><b>${esc(r.code)}</b></a></td><td>${th ? `<img src="${esc(th)}" loading="lazy" style="width:34px;height:34px;object-fit:contain;vertical-align:middle;margin-right:6px;border:1px solid var(--line);border-radius:6px;background:#fff" onerror="this.remove()">` : ''}${esc(r.name)} <span class="mut">${esc(r.brand||'')}</span></td><td class="mut">${esc(r.barcode||'—')}</td><td>${esc(r.wh_name)}</td>
+  tb.innerHTML = list.slice(0, 500).map(r => { const th = r.photo_url ? r.photo_url.replace('/products/', '/products/_t/') : ''; return `<tr><td><a href="#" onclick="go('item-${r.product_id}');return false" style="color:inherit"><b>${esc(r.code)}</b></a></td><td>${th ? `<img src="${esc(th)}" data-full="${esc(r.photo_url)}" class="st-thumb" loading="lazy" onerror="this.remove()">` : ''}${esc(r.name)} <span class="mut">${esc(r.brand||'')}</span></td><td class="mut">${esc(r.barcode||'—')}</td><td>${esc(r.wh_name)}</td>
     <td class="money">${r.physical}</td><td class="money">${r.reserved}</td>
     <td class="money"><b class="${r.available<=0?'low':'ok'}">${r.available}</b></td>
     <td class="money">${fmt(r.stock_value)}</td></tr>`; }).join('') +
     (list.length > 500 ? `<tr><td colspan="8" class="mut">… ${list.length - 500} baris lagi — persempit filter</td></tr>` : '');
 };
+// hover-zoom preview for stock thumbnails
+(() => {
+  const box = document.createElement('div'); box.id = 'imgzoom';
+  box.innerHTML = '<img alt=""><div class="cap"></div>';
+  document.body.appendChild(box);
+  const im = box.querySelector('img'), cap = box.querySelector('.cap');
+  const place = ev => {
+    const x = Math.min(ev.clientX + 18, innerWidth - 330), y = Math.min(ev.clientY + 18, innerHeight - 350);
+    box.style.left = Math.max(6, x) + 'px'; box.style.top = Math.max(6, y) + 'px';
+  };
+  document.addEventListener('mouseover', ev => {
+    const t = ev.target.closest && ev.target.closest('.st-thumb');
+    if (!t) return;
+    im.src = t.dataset.full || t.src;
+    const row = t.closest('tr');
+    cap.textContent = row ? (row.cells[1].textContent.trim().slice(0, 60)) : '';
+    place(ev); box.style.display = 'block';
+  });
+  document.addEventListener('mousemove', ev => { if (box.style.display === 'block') place(ev); });
+  document.addEventListener('mouseout', ev => {
+    const t = ev.target.closest && ev.target.closest('.st-thumb');
+    if (t && !(ev.relatedTarget && ev.relatedTarget.closest && ev.relatedTarget.closest('.st-thumb'))) box.style.display = 'none';
+  });
+  window.addEventListener('scroll', () => { box.style.display = 'none'; }, true);
+})();
 window.addProduct = async ev => {
   ev.preventDefault();
   const f = ev.target, b = Object.fromEntries(new FormData(f).entries());

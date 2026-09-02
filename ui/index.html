@@ -40,6 +40,10 @@ table{width:100%;border-collapse:collapse;background:var(--card);border:1px soli
 th{background:linear-gradient(120deg,#eef1f9,#e3e7f2);text-align:left;padding:8px 10px;color:#3c4360;font-size:11px;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--line)}
 td{padding:8px 10px;border-top:1px solid var(--line)}
 tr:hover td{background:#f0f3fb}
+.st-thumb{width:52px;height:52px;object-fit:contain;vertical-align:middle;margin-right:8px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:zoom-in}
+#imgzoom{position:fixed;z-index:99;display:none;pointer-events:none;background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px;box-shadow:0 14px 44px rgba(8,14,38,.35)}
+#imgzoom img{width:300px;height:300px;object-fit:contain;display:block}
+#imgzoom .cap{font-size:11px;color:var(--mut);text-align:center;margin-top:6px}
 .btn{display:inline-block;background:linear-gradient(135deg,#1b3691,#2f56c4);color:#fff;border:1px solid #1b3691;border-radius:7px;
   padding:7px 13px;font-weight:600;font-size:12px;cursor:pointer;margin:2px 4px 2px 0}
 .btn:hover{background:linear-gradient(135deg,#0e1a45,#1b3691)}
