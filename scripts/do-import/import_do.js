@@ -34,7 +34,20 @@ function matchCustomer(cust) {
     else { const inter = [...m.toks].filter(x => t.has(x)).length; if (inter >= 2) s = inter; }
     if (s > bs) { bs = s; best = m; }
   }
-  return bs >= 3 ? best : null;
+  if (bs >= 3) return best;
+  // abbreviation: consecutive first-letters of master tokens found in candidate words
+  for (const m of masters) {
+    if (m.name.startsWith('BUCKET')) continue;
+    const words = fix(m.name.toUpperCase()).split(/[^A-Z0-9]+/).filter(w => w.length > 1);
+    if (words.length < 2 || words.length > 6) continue;
+    const cw = [...t];
+    let hit = false;
+    for (let i = 0; i + words.length <= cw.length && !hit; i++) {
+      hit = words.every((w, k) => cw[i + k] && cw[i + k][0] === w[0] && cw[i + k].length >= 2);
+    }
+    if (hit) return m;
+  }
+  return null;
 }
 
 // customer: try linked SO's customer first (invoice # -> sales_orders), then text candidates
