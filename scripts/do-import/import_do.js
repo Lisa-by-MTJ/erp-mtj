@@ -85,19 +85,56 @@ function matchProduct(brand, model, desc) {
   return null;
 }
 
-// ---------- dedupe parents by do_no (keep richer one) ----------
-const byNo = new Map();
+// ---------- dedupe parents by do_no ----------
+// Same do_no + same invoice + same date -> reprint, keep the richer one.
+// Same do_no but different invoice/date -> distinct docs; keep both (2nd gets -B).
+const byNo = new Map();   // key -> [variants]
 for (const r of parents) {
-  const prev = byNo.get(r.do_no);
-  if (!prev) { byNo.set(r.do_no, r); continue; }
-  const score = x => (x.items ? x.items.length : 0) + (x.customer ? 2 : 0);
-  if (score(r) > score(prev)) byNo.set(r.do_no, r);
+  let placed = false;
+  for (const [key, group] of byNo) {
+    if (key !== r.do_no) continue;
+    const same = group.find(g => (g.invoice || '') === (r.invoice || '') && (g.date || '').slice(0, 7) === (r.date || '').slice(0, 7));
+    if (same) {
+      const score = x => (x.items ? x.items.length : 0) + (x.invoice ? 1 : 0);
+      if (score(r) > score(same)) group[group.indexOf(same)] = r;
+    } else group.push(r);
+    placed = true; break;
+  }
+  if (!placed) byNo.set(r.do_no, [r]);
 }
-const rows = [...byNo.values()].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+const rows = [];
+for (const [no, group] of byNo) {
+  group.sort((a, b) => (b.items || []).length - (a.items || []).length);
+  group.forEach((r, i) => { r.doc_key = i === 0 ? r.do_no : r.do_no + '-B' + i; rows.push(r); });
+}
+rows.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
 
 // SN pages attach to parent by do_no
 const snByNo = new Map();
 for (const s of snPages) if (!snByNo.has(s.do_no)) snByNo.set(s.do_no, s);
+
+// ---------- PDF attachment helpers ----------
+const PDFS = process.env.DO_PDFS || '';
+const fsX = require('fs'), pathX = require('path');
+const ATT_DIR = pathX.join(DATA, 'uploads', 'attachments');
+function attachPdf(docId, fileName, urlOut) {
+  // fileName = original parsed file name (pre2026__/y2026__ stripped at parse time is stored in r.file)
+  if (!PDFS) return null;
+  let src = null;
+  for (const pre of fsX.readdirSync(PDFS)) {
+    if (pre.endsWith('__' + fileName)) { src = pathX.join(PDFS, pre); break; }
+  }
+  if (!src) return null;
+  const clean = fileName.replace(/[^\w.\- ]/g, '_').slice(-80);
+  const stored = `delivery_orders-${docId}-${Date.now()}-${clean}`;
+  fsX.copyFileSync(src, pathX.join(ATT_DIR, stored));
+  const size = fsX.statSync(pathX.join(ATT_DIR, stored)).size;
+  const url = '/uploads/attachments/' + stored;
+  db.prepare(`INSERT INTO doc_attachments(table_name,doc_id,filename,stored_path,size_bytes,mime,uploaded_by)
+    VALUES('delivery_orders',?,?,?,?, 'application/pdf', 1)`).run(docId, clean, url, size);
+  return url;
+}
+if (PDFS) fsX.mkdirSync(ATT_DIR, { recursive: true });
 
 // ---------- report / commit ----------
 let stat = { matched: 0, bucket: 0, soLink: 0, withItems: 0, prodMatched: 0, prodMiss: 0, snAttach: 0 };
@@ -141,7 +178,7 @@ const insDO = db.prepare(`INSERT INTO delivery_orders(
   VALUES(?, 'LOCKED', 1, ?, ?, ?, 1, ?, ?, ?, 1, 1, ?, ?, ?, ?)`);
 const insLine = db.prepare(`INSERT INTO delivery_order_lines(delivery_order_id,sales_order_line_id,product_id,qty) VALUES(?,?,?,?)`);
 
-let n = 0, matched = 0, bucketed = 0, linesN = 0, orphanLines = 0;
+let n = 0, matched = 0, bucketed = 0, linesN = 0, orphanLines = 0, attN = 0;
 db.exec('BEGIN');
 for (const r of rows) {
   const c = r._cust || {};
@@ -149,16 +186,21 @@ for (const r of rows) {
   if (c.id) matched++; else bucketed++;
   const note = `[DO import 01-09-2026] file: ${r.file} | billed: ${r.invoice || '-'}` +
     (r.quotation ? ` | quote: ${r.quotation}` : '') +
-    (c.via ? ` | cust via ${c.via}` : ` | billed-to: "${(r.cust_all || []).join(' / ')}" (UNMATCHED)`) +
+    ` | cust: ${c.id ? c.name : 'UNMATCHED "' + ((r.cust_all || []).slice(0, 2).join(' / ')) + '" -> BUCKET-ASJ'}` +
+    (c.via ? ` (via ${c.via})` : '') +
     (r.ocr ? ' | parsed via OCR' : '') + (r.date_est ? ' | date estimated from DO#' : '');
-  const info = insDO.run(r.do_no, r.date, c.so_id || null, r.purpose,
-    (r.cust_lines && r.cust_lines[0]) || null, note, '/drive-import/02-delivery-order/' + encodeURIComponent(r.file),
+  const info = insDO.run(r.doc_key, r.date, c.so_id || null, r.purpose,
+    (r.cust_lines && r.cust_lines[0]) || null, note, null,
     r.date + ' 00:00:00', r.date + ' 00:00:00', now, now);
   const id = Number(info.lastInsertRowid);
   for (const it of (r.items || [])) {
     if (it._pid) { insLine.run(id, null, it._pid, it.qty); linesN++; }
     else orphanLines++;
   }
+  // attach the DO PDF itself + matching SN attachment page if any
+  if (attachPdf(id, r.file, r.tag)) attN++;
+  const sn = snByNo.get(r.do_no);
+  if (sn && attachPdf(id, sn.file, sn.tag)) { attN++; stat.snAttach++; }
   n++;
 }
 // doc_sequences for DO/SJ aligned above historical numbering

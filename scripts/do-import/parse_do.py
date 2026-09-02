@@ -145,17 +145,17 @@ def parse(path):
 
     # --- customer candidates: text lines then filename tokens ---
     lines = [l.strip() for l in txt.splitlines() if l.strip()]
-    junk = re.compile(r'^(DELIVERY ORDER|Date|DO ?#|Invoice ?#|Quotation ?#|DELIVERED TO|Delivered To|NO |Condition|Description|Address|Attention|Contact|Attn|UP\.|PT\.? |Company|Jl\.|Jakarta|Daerah|Kota|Provinsi|Telepon|Telp|No\. Hp|Active|.*@.*)', re.I)
+    junk = re.compile(r'^(DELIVERY\s*ORDER|DELIVERYORDER|Date|DO\s*#|Invoice|Quotation|DELIVERED\s*TO|Delivered\s*To|CONDITION|\(?\s*(Good|Poor|Not Good|Baik)|NO\s*$|No\.?$|Brand|Type|Description|QTY|Address|Attention|Attn|UP\.|Company|Jl\.|JI\.|Jln|Jakarta|Daerah|Kota|Provinsi|Telepon|Telp|Phone|Email|Fax|Signature|Name|CHECKER|WAREHOUSE|SALES|SECURITY|CUSTOMER\b|Your\s*One|Office:|PT\.\s*ALVINITY|PT\.?\s*ALVINITYSOLU|ALVINITY|ALVINET|\*|Lihat|Please\s*see|WIRELESS|KABEL|MICROPHONE|MIC\b|Speaker|Amplifier|Processor|Cable|Mix(er|Pro))', re.I)
+    addr = re.compile(r'\d{5}|\+62|\(\+?62|08\d{2}|@|Kav|Ruko|Blok|Lt\.|Gedung', re.I)
     name_lines = []
-    for l in lines[:40]:
-        if 4 < len(l) < 70 and not junk.match(l) and not re.match(r'^\d', l) and not re.search(r'\d{5,}', l) and not re.search(r'\+62|\(\+?62', l):
+    for i, l in enumerate(lines):
+        if re.match(r'^(Proel|Eikon|Aztec|Maia|Stereo|Microphone|All-in|Desktop|Nearfield|Active)\b', l, re.I): continue  # column bleed / description cells
+        if 5 < len(l) < 70 and not junk.match(l) and not addr.search(l) and not re.match(r'^\d', l) and not re.search(r'\d{5,}', l):
+            # skip sender/company header words
+            if re.search(r'ALVINITY|MONALISA TUNGGAL|PROMEDIA INNOV|SOLUSINDOJAYA', l, re.I) and not re.search(r'PT\.|CV\.|TOKO|CV ', l, re.I):
+                continue
             name_lines.append(l)
     fm = re.sub(r'^(ASJ|JTS|2025|2024|2026)\s+', '', real[:-4])
-    ftoks = [t for t in re.split(r'[_ ]', fm) if t]
-    # filename customer: drop leading kind tokens (DO, SN, D1, PROJECT, num) and trailing date-ish/item tokens
-    cust_fname = None
-    mm = re.match(r'^D[O11][ _]?(?:SN[ _]?|PROJECT[ _]?|DEMO[ _]?)*(?:_?\d{1,4})?_+(.+?)(?:_[A-Za-z0-9 .&/()-]{0,40})?_(?:\d{1,2}-\d{1,2}-\d{2}|\d{1,2}-\d{2}|SN|[\d-]{6,}|\d{8})?\.?pdf$', fm + '.pdf', re.I)
-    out['cust_lines'] = name_lines[:6]
     # filename fallback segments: try between seq and trailing
     parts = re.split(r'_', fm)
     cands = []
@@ -168,6 +168,7 @@ def parse(path):
                     if re.match(r'^(\d{1,2}-\d{1,2}|\d{6,8}|SN|X?\d{2})$', q): break
                     seg.append(q)
                 if seg: cands.append(' '.join(seg))
+    out['cust_lines'] = name_lines[:6]
     out['cust_fname'] = cands[0] if cands else None
     out['cust_all'] = name_lines[:6] + cands
 
