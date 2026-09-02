@@ -157,7 +157,7 @@ function start(port) {
           // brute-force guard: 10 failed attempts / 15 min per IP+username
           if (loginBlocked(key)) {
             console.log(`[MTJ-ERP] login rate-limited: ${key.split('|')[0]} (user=${u})`);
-            return send(res, 302, '', 'text/plain', { 'Location': '/login?e=1' });
+            return send(res, 302, '', 'text/plain', { 'Location': '/login?e=2' });
           }
           // 1) DB users (scrypt-hashed, role-backed)
           const row = db.prepare(`SELECT * FROM users WHERE username=? AND is_active=1`).get(u);

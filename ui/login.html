@@ -54,12 +54,15 @@ button:hover{background:linear-gradient(135deg,#0e1a45,#1b3691);box-shadow:0 4px
   </div>
   <form class="box" method="POST" action="/login">
     <div class="err" id="err" style="display:none">Invalid username or password</div>
+    <div class="err" id="errlock" style="display:none">Terlalu banyak percobaan — coba lagi dalam 15 menit. Too many failed attempts — try again in 15 minutes.</div>
     <div class="f"><label>Username</label><input name="username" autocomplete="username" autofocus required></div>
     <div class="f"><label>Password</label><input name="password" type="password" autocomplete="current-password" required></div>
     <button type="submit">Sign in</button>
   </form>
   <div class="foot"><b>Lighting · Audio · LED Visual</b> — internal system</div>
 </div>
-<script>if(new URLSearchParams(location.search).get('e'))document.getElementById('err').style.display='block';</script>
+<script>var e = new URLSearchParams(location.search).get('e');
+  if (e === '2') document.getElementById('errlock').style.display = 'block';
+  else if (e) document.getElementById('err').style.display = 'block';</script>
 </body>
 </html>

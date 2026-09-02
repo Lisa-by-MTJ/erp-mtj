@@ -68,11 +68,23 @@ function periodStart(period) {
   return now.getFullYear() + '-01-01'; // ytd (default)
 }
 function topProducts(period) {
-  return rows(`SELECT p.id, p.code, p.name, SUM(l.qty) qty, SUM(l.line_total) revenue
+  // Primary: posted SO line items (normal ERP flow).
+  const fromLines = rows(`SELECT p.id, p.code, p.name, SUM(l.qty) qty, SUM(l.line_total) revenue
     FROM sales_order_lines l JOIN sales_orders o ON o.id = l.sales_order_id
     JOIN products p ON p.id = l.product_id
     WHERE o.status = 'POSTED' AND o.so_date >= ?
     GROUP BY p.id ORDER BY revenue DESC LIMIT 5`, periodStart(period));
+  if (fromLines.length) return fromLines;
+  // Fallback: historical ASJ SOs were imported as totals with NO line items, so
+  // derive top movers from shipped DO lines (they carry product + qty) instead of
+  // showing the misleading "no posted sales yet".
+  return rows(`SELECT p.id, p.code, p.name, SUM(dl.qty) qty, 0 revenue
+    FROM delivery_order_lines dl
+    JOIN delivery_orders d ON d.id = dl.delivery_order_id
+    JOIN sales_orders o ON o.id = d.sales_order_id
+    JOIN products p ON p.id = dl.product_id
+    WHERE o.status = 'POSTED' AND d.do_date >= ?
+    GROUP BY p.id ORDER BY qty DESC LIMIT 5`, periodStart(period));
 }
 function topCustomers(period) {
   return rows(`SELECT bp.id, bp.name, COUNT(*) orders, SUM(o.grand_total) revenue

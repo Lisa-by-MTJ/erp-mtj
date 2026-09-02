@@ -26,7 +26,8 @@ function snapshot() {
     contract_value_active: sum(`SELECT COALESCE(SUM(contract_value),0) s FROM projects WHERE status IN ('CONTRACTED','IN_PROGRESS','DELIVERED','BILLING')`),
     billed: sum(`SELECT COALESCE(SUM(b.amount),0) s FROM project_billings b JOIN projects p ON p.id=b.project_id WHERE b.status IN ('INVOICED','PARTIAL','PAID') AND p.status!='CANCELLED'`),
     outstanding_billing: sum(`SELECT COALESCE(SUM(b.amount-b.paid_amount),0) s FROM project_billings b JOIN projects p ON p.id=b.project_id WHERE b.status IN ('PLANNED','INVOICED','PARTIAL') AND p.status NOT IN ('CLOSED','CANCELLED')`),
-    stock_value: sum(`SELECT COALESCE(SUM(physical*avg_cost),0) s FROM inventory_balances`),
+    stock_value: sum(`SELECT COALESCE(SUM(ib.physical * COALESCE(NULLIF(ib.avg_cost,0), p.cost_price, 0)),0) s
+      FROM inventory_balances ib LEFT JOIN products p ON p.id=ib.product_id`),
     reserved_stock: sum(`SELECT COALESCE(SUM(reserved),0) s FROM inventory_balances`),
     available_stock: sum(`SELECT COALESCE(SUM(physical-reserved),0) s FROM inventory_balances`),
     low_stock: cnt(`SELECT COUNT(*) c FROM inventory_balances ib JOIN products p ON p.id=ib.product_id WHERE (ib.physical-ib.reserved)<=p.reorder_point AND p.reorder_point>0`),

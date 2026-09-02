@@ -37,6 +37,28 @@ window.sideToggle = () => {
 };
 try { if (localStorage.getItem('side_collapsed') === '1') document.addEventListener('DOMContentLoaded', () => window.sideToggle()); } catch (e) { /* ignore */ }
 
+// ---- mobile off-canvas drawer (≤900px) ----
+window.mbToggle = () => {
+  const open = document.body.classList.toggle('side-open');
+  document.getElementById('mb-toggle').textContent = open ? '✕' : '☰';
+  if (open) document.addEventListener('keydown', mbEsc);
+  else document.removeEventListener('keydown', mbEsc);
+};
+function mbEsc(e) { if (e.key === 'Escape') closeMb(); }
+function closeMb() {
+  document.body.classList.remove('side-open');
+  const mb = document.getElementById('mb-toggle');
+  if (mb) mb.textContent = '☰';
+  document.removeEventListener('keydown', mbEsc);
+}
+// tapping a nav link on mobile closes the drawer
+document.addEventListener('click', e => {
+  const a = e.target.closest('nav a');
+  if (a && document.body.classList.contains('side-open')) closeMb();
+});
+// on resize to desktop, drop any stale drawer state
+window.addEventListener('resize', () => { if (innerWidth > 900) closeMb(); });
+
 // ---------------- views ----------------
 const views = {};
 
@@ -900,6 +922,16 @@ window.go = async v => {
     if (cm) return await views.crm360(Number(cm[1]));
     await views[v]();
   } catch (e) { main.innerHTML = `<h1>Error</h1><pre>${e.message}</pre>`; }
+  // mobile: wrap bare tables so they scroll horizontally instead of breaking the page
+  if (innerWidth <= 900 && main) {
+    main.querySelectorAll('table').forEach(t => {
+      if (t.closest('.tblwrap') || t.closest('.sheetwrap')) return;
+      const w = document.createElement('div');
+      w.className = 'tblwrap';
+      t.replaceWith(w);
+      w.appendChild(t);
+    });
+  }
 };
 // session header (user + role + logout) — injected above every view
 (async () => {
