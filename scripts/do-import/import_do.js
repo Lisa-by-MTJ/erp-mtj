@@ -122,6 +122,34 @@ for (const [no, group] of byNo) {
 }
 rows.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
 
+// ---------- repairs: sequence from filename beats body misreads; year from DO# suffix wins ----------
+for (const r of rows) {
+  const fsm = r.file.match(/(?:DO|D1|DEMO|Project|DO Project)[_ ]?_?0*(\d{2,4})[_ ]/i) || r.file.match(/[_ ]0*(\d{2,4})[_ ]/);
+  const bsm = r.do_no.match(/^(\d+)-DO/i);
+  if (fsm && bsm && fsm[1] !== bsm[1] && Math.abs(+fsm[1] - +bsm[1]) > 1) {
+    // body misread (e.g. 2256 vs 226): rebuild do_no with filename seq
+    const old = r.do_no;
+    const suffix = old.replace(/^\d+-(DO)/i, '$1');
+    r.do_no = fsm[1] + '-' + suffix;
+    if (r.doc_key.startsWith(old)) r.doc_key = r.do_no + r.doc_key.slice(old.length);
+    r.note_fix = 'seq corrected from filename';
+  }
+  const mon = (r.do_no.match(/-([IVX]{1,4})-(\d{2})$/i) || [])[1];
+  const yy = parseInt((r.do_no.match(/-(?:[IVX]{1,4}|(\d{1,2}))-(\d{2})$/i) || [])[2] || '', 10);
+  const romanMonth = { I:1,II:2,III:3,IV:4,V:5,VI:6,VII:7,VIII:8,IX:9,X:10,XI:11,XII:12 }[(mon || '').toUpperCase()];
+  if (r.date && !isNaN(yy) && yy >= 20) {
+    const wantY = 2000 + yy;
+    const y = +r.date.slice(0, 4), m = +r.date.slice(5, 7);
+    if (y !== wantY || (romanMonth && m !== romanMonth)) {
+      // keep day-of-month if same month; else midpoint of roman month
+      const d = (m === (romanMonth || m)) ? r.date.slice(8) : '15';
+      const nm = romanMonth || m;
+      r.date = `${wantY}-${String(nm).padStart(2, '0')}-${d}`;
+      r.date_fixed = true;
+    }
+  }
+}
+
 // SN pages attach to parent by do_no
 const snByNo = new Map();
 for (const s of snPages) if (!snByNo.has(s.do_no)) snByNo.set(s.do_no, s);
