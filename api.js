@@ -198,8 +198,10 @@ route('GET', '/api/warehouses', (c) => ok(c.res, rows(`SELECT * FROM warehouses 
 // ================= STOCK / INVENTORY (§18-§21) =================
 route('GET', '/api/stock', (c) => ok(c.res, rows(`
   SELECT ib.product_id, p.code, p.name, p.brand, p.barcode, w.code wh_code, w.name wh_name,
-         ib.physical, ib.reserved, (ib.physical - ib.reserved) available, ib.avg_cost,
-         (ib.physical*ib.avg_cost) stock_value, p.reorder_point
+         ib.physical, ib.reserved, (ib.physical - ib.reserved) available,
+         COALESCE(NULLIF(ib.avg_cost,0), p.cost_price, 0) avg_cost,
+         (ib.physical * COALESCE(NULLIF(ib.avg_cost,0), p.cost_price, 0)) stock_value,
+         p.reorder_point
   FROM inventory_balances ib JOIN products p ON p.id=ib.product_id JOIN warehouses w ON w.id=ib.warehouse_id
   ORDER BY p.code`)));
 route('GET', '/api/stock/:productId', (c) => ok(c.res, totalsForProduct(Number(c.params.productId))));
@@ -217,7 +219,9 @@ route('GET', '/api/products/:id/detail', (c) => {
   return ok(c.res, {
     product,
     by_warehouse: rows(`SELECT ib.*, w.code wh_code, w.name wh_name,
-        (ib.physical-ib.reserved) available, (ib.physical*ib.avg_cost) stock_value
+        (ib.physical-ib.reserved) available,
+        COALESCE(NULLIF(ib.avg_cost,0), ${Number(product.cost_price)||0}, 0) avg_cost,
+        (ib.physical * COALESCE(NULLIF(ib.avg_cost,0), ${Number(product.cost_price)||0}, 0)) stock_value
       FROM inventory_balances ib JOIN warehouses w ON w.id=ib.warehouse_id
       WHERE ib.product_id=? ORDER BY w.code`, id),
     totals: totalsForProduct(id),

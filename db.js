@@ -283,6 +283,18 @@ function verifyPassword(pw, stored) {
 if (!db.prepare(`SELECT 1 c FROM pragma_table_info('delivery_orders') WHERE name='customer_id'`).get()) {
   db.exec(`ALTER TABLE delivery_orders ADD COLUMN customer_id INTEGER REFERENCES business_partners(id)`);
 }
+// Cost backfill (audit #2): imported inventory was seeded with avg_cost=0 so the
+// dashboard's "Stock Value (avg cost)" read Rp 0 despite 78k+ units in stock.
+// One-time, idempotent: fill avg_cost from the product master cost where missing.
+try {
+  const zeroCost = db.prepare(`SELECT COUNT(*) c FROM inventory_balances WHERE avg_cost=0 AND physical>0`).get();
+  if (zeroCost && zeroCost.c > 0) {
+    const upd = db.prepare(`UPDATE inventory_balances SET avg_cost = COALESCE(
+        (SELECT COALESCE(NULLIF(p.cost_price,0), p.last_cost, 0) FROM products p WHERE p.id = inventory_balances.product_id), avg_cost)
+      WHERE avg_cost = 0 AND physical > 0`).run();
+    console.log(`[MTJ-ERP] cost backfill applied: ${upd.changes} balance rows`);
+  }
+} catch (e) { console.error('[MTJ-ERP] cost backfill skipped:', e.message); }
 function nextDocNo(prefix) {
   const yr = new Date().getFullYear();
   runExclusive(() => {
