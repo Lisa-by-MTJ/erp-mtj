@@ -468,7 +468,7 @@ views.delivery = async () => {
     <div style="align-self:flex-end"><button class="btn" onclick="mkDO()">Create DO + SJ</button></div>
    </div></div>
   <div class="row"><input id="do-q" placeholder="Filter by DO no / customer / date…" style="flex:1" oninput="renderDOs()"></div>
-  <table><tr><th>DO No</th><th>Customer</th><th>SO</th><th>Date</th><th>Purpose</th><th>Lines</th><th>Status</th></tr>
+  <table><tr><th>DO No</th><th>Customer</th><th>SO</th><th>Date</th><th>Purpose</th><th>Lines</th><th>Status</th><th></th></tr>
   <tbody id="do-tbody"></tbody></table>`;
   window.__dos = list;
   renderDOs();
@@ -477,8 +477,11 @@ window.renderDOs = () => {
   const q = ($('#do-q')?.value || '').toLowerCase();
   const tb = $('#do-tbody'); if (!tb) return;
   const list = (window.__dos || []).filter(d => !q || [d.doc_no, d.customer_name, d.do_date].join(' ').toLowerCase().includes(q));
-  tb.innerHTML = list.slice(0, 400).map(d => `<tr><td><b>${esc(d.doc_no)}</b></td><td>${esc(d.customer_name||'—')}</td><td>${esc(d.so_no||'')}</td>
-   <td>${d.do_date}</td><td>${esc(d.purpose)}</td><td>${d.lines ?? ''}</td><td>${badge(d.status)}</td></tr>`).join('');
+  tb.innerHTML = list.slice(0, 400).map(d => `<tr><td>${d.pdf_url
+    ? `<a href="${d.pdf_url}" target="_blank" rel="noopener" title="Open DO PDF"><b>${esc(d.doc_no)}</b> 📄</a>`
+    : `<b>${esc(d.doc_no)}</b>`}</td><td>${esc(d.customer_name||'—')}</td><td>${esc(d.so_no||'')}</td>
+   <td>${d.do_date}</td><td>${esc(d.purpose)}</td><td>${d.lines ?? ''}</td><td>${badge(d.status)}</td>
+   <td>${d.atts ? `<button class="btn sm gray" title="Lampiran PDF" onclick="attPanel('delivery_orders',${d.id},'${esc(d.doc_no)}')">📎 ${d.atts}</button>` : ''}</td></tr>`).join('');
 };
 window.mkDO = async () => {
   const sel = $('#do-so'); const soId = +sel.value;

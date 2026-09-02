@@ -506,7 +506,10 @@ route('POST', '/api/docs/:table/:id/:action', async (c) => {
 // ================= DELIVERY ORDERS + SURAT JALAN (§28) =================
 route('GET', '/api/delivery-orders', (c) => ok(c.res, rows(`
   SELECT d.*, s.doc_no so_no, p.project_code, b.name customer_name,
-    (SELECT COUNT(*) FROM delivery_order_lines l WHERE l.delivery_order_id=d.id) lines
+    (SELECT COUNT(*) FROM delivery_order_lines l WHERE l.delivery_order_id=d.id) lines,
+    (SELECT a.stored_path FROM doc_attachments a WHERE a.table_name='delivery_orders' AND a.doc_id=d.id
+      ORDER BY a.id LIMIT 1) pdf_url,
+    (SELECT COUNT(*) FROM doc_attachments a WHERE a.table_name='delivery_orders' AND a.doc_id=d.id) atts
   FROM delivery_orders d
   LEFT JOIN sales_orders s ON s.id=d.sales_order_id
   LEFT JOIN projects p ON p.id=d.project_id
