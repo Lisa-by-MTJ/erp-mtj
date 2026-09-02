@@ -5,6 +5,8 @@ const fs = require('fs');
 const DATA = process.env.MTJ_DATA_DIR || '/app/data';
 const db = new DatabaseSync(DATA + '/mtj_erp.db');
 const COMMIT = process.argv.includes('--commit');
+if (!db.prepare(`SELECT 1 c FROM pragma_table_info('delivery_orders') WHERE name='customer_id'`).get())
+  db.exec(`ALTER TABLE delivery_orders ADD COLUMN customer_id INTEGER REFERENCES business_partners(id)`);
 
 const parsed = JSON.parse(fs.readFileSync(process.env.DO_PARSED || '/app/do_parsed.json', 'utf8')).filter(r => r.ok);
 const parents = parsed.filter(r => r.doc_kind === 'DELIVERY_ORDER');
@@ -214,9 +216,9 @@ if (!bucket) {
 
 const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
 const insDO = db.prepare(`INSERT INTO delivery_orders(
-  doc_no,status,version,do_date,sales_order_id,purpose,warehouse_id,recipient_name,note,signed_copy_url,
+  doc_no,status,version,do_date,sales_order_id,customer_id,purpose,warehouse_id,recipient_name,note,signed_copy_url,
   created_by,approved_by,posted_at,closed_at,created_at,updated_at)
-  VALUES(?, 'LOCKED', 1, ?, ?, ?, 1, ?, ?, ?, 1, 1, ?, ?, ?, ?)`);
+  VALUES(?, 'LOCKED', 1, ?, ?, ?, ?, 1, ?, ?, ?, 1, 1, ?, ?, ?, ?)`);
 const insLine = db.prepare(`INSERT INTO delivery_order_lines(delivery_order_id,sales_order_line_id,product_id,qty) VALUES(?,?,?,?)`);
 
 let n = 0, matched = 0, bucketed = 0, linesN = 0, orphanLines = 0, attN = 0;
@@ -234,7 +236,7 @@ for (const r of rows) {
       const un = (r.items || []).filter(it => !it._pid).map(it => `${it.qty} ${it.raw}`);
       return un.length ? ' | lines w/o catalog match: ' + un.join('; ').slice(0, 900) : '';
     })();
-  const info = insDO.run(r.doc_key, r.date, c.so_id || null, r.purpose,
+  const info = insDO.run(r.doc_key, r.date, c.so_id || null, c.id || null, r.purpose,
     (r.cust_lines && r.cust_lines[0]) || null, note, null,
     r.date + ' 00:00:00', r.date + ' 00:00:00', now, now);
   const id = Number(info.lastInsertRowid);

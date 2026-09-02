@@ -467,9 +467,18 @@ views.delivery = async () => {
     </select></div>
     <div style="align-self:flex-end"><button class="btn" onclick="mkDO()">Create DO + SJ</button></div>
    </div></div>
-  <table><tr><th>DO No</th><th>Surat Jalan</th><th>SO</th><th>Date</th><th>Status</th></tr>
-  ${list.map(d => `<tr><td><b>${esc(d.doc_no)}</b></td><td>${esc(d.surat_jalan_no)}</td><td>${esc(d.so_no||'')}</td>
-   <td>${d.do_date}</td><td>${badge(d.status)}</td></tr>`).join('')}</table>`;
+  <div class="row"><input id="do-q" placeholder="Filter by DO no / customer / date…" style="flex:1" oninput="renderDOs()"></div>
+  <table><tr><th>DO No</th><th>Customer</th><th>SO</th><th>Date</th><th>Purpose</th><th>Lines</th><th>Status</th></tr>
+  <tbody id="do-tbody"></tbody></table>`;
+  window.__dos = list;
+  renderDOs();
+};
+window.renderDOs = () => {
+  const q = ($('#do-q')?.value || '').toLowerCase();
+  const tb = $('#do-tbody'); if (!tb) return;
+  const list = (window.__dos || []).filter(d => !q || [d.doc_no, d.customer_name, d.do_date].join(' ').toLowerCase().includes(q));
+  tb.innerHTML = list.slice(0, 400).map(d => `<tr><td><b>${esc(d.doc_no)}</b></td><td>${esc(d.customer_name||'—')}</td><td>${esc(d.so_no||'')}</td>
+   <td>${d.do_date}</td><td>${esc(d.purpose)}</td><td>${d.lines ?? ''}</td><td>${badge(d.status)}</td></tr>`).join('');
 };
 window.mkDO = async () => {
   const sel = $('#do-so'); const soId = +sel.value;

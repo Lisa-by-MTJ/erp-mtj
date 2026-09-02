@@ -505,18 +505,24 @@ route('POST', '/api/docs/:table/:id/:action', async (c) => {
 
 // ================= DELIVERY ORDERS + SURAT JALAN (§28) =================
 route('GET', '/api/delivery-orders', (c) => ok(c.res, rows(`
-  SELECT d.*, s.doc_no so_no, p.project_code FROM delivery_orders d
+  SELECT d.*, s.doc_no so_no, p.project_code, b.name customer_name,
+    (SELECT COUNT(*) FROM delivery_order_lines l WHERE l.delivery_order_id=d.id) lines
+  FROM delivery_orders d
   LEFT JOIN sales_orders s ON s.id=d.sales_order_id
-  LEFT JOIN projects p ON p.id=d.project_id ORDER BY d.id DESC`)));
+  LEFT JOIN projects p ON p.id=d.project_id
+  LEFT JOIN business_partners b ON b.id=COALESCE(d.customer_id, s.customer_id)
+  ORDER BY d.do_date DESC, d.id DESC`)));
 route('POST', '/api/delivery-orders', async (c) => {
   if (!requirePerm(c, 'create')) return;
   const b = await readBody(c.req);
   try {
     const no = docNumber('DO');
     const sj = docNumber('SJ');
-    const info = run(`INSERT INTO delivery_orders(doc_no,surat_jalan_no,status,do_date,sales_order_id,project_id,purpose,warehouse_id,vehicle_info,driver_name,recipient_name)
-      VALUES(?,?,?,COALESCE(?,date('now')),?,?,?,?,?,?,?)`,
-      no, sj, 'DRAFT', b.do_date || null, b.sales_order_id || null, b.project_id || null,
+    const soCust = b.sales_order_id
+      ? (one(`SELECT customer_id FROM sales_orders WHERE id=?`, b.sales_order_id) || {}).customer_id || null : null;
+    const info = run(`INSERT INTO delivery_orders(doc_no,surat_jalan_no,status,do_date,sales_order_id,customer_id,project_id,purpose,warehouse_id,vehicle_info,driver_name,recipient_name)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+      no, sj, 'DRAFT', b.do_date || null, b.sales_order_id || null, b.customer_id || soCust, b.project_id || null,
       b.purpose || 'SALES', b.warehouse_id, b.vehicle_info || null, b.driver_name || null, b.recipient_name || null);
     const id = Number(info.lastInsertRowid);
     for (const l of (b.lines || [])) {

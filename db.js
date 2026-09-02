@@ -279,6 +279,10 @@ function verifyPassword(pw, stored) {
 })();
 
 // ---------------- §48 Document Numbering Engine ----------------
+// Migration guard: DO customer link (added with the ASJ historical DO import)
+if (!db.prepare(`SELECT 1 c FROM pragma_table_info('delivery_orders') WHERE name='customer_id'`).get()) {
+  db.exec(`ALTER TABLE delivery_orders ADD COLUMN customer_id INTEGER REFERENCES business_partners(id)`);
+}
 function nextDocNo(prefix) {
   const yr = new Date().getFullYear();
   runExclusive(() => {
