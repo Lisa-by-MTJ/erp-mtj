@@ -201,7 +201,11 @@ for (const r of rows) {
     (r.quotation ? ` | quote: ${r.quotation}` : '') +
     ` | cust: ${c.id ? c.name : 'UNMATCHED "' + ((r.cust_all || []).slice(0, 2).join(' / ')) + '" -> BUCKET-ASJ'}` +
     (c.via ? ` (via ${c.via})` : '') +
-    (r.ocr ? ' | parsed via OCR' : '') + (r.date_est ? ' | date estimated from DO#' : '');
+    (r.ocr ? ' | parsed via OCR' : '') + (r.date_est ? ' | date estimated from DO#' : '') +
+    (() => {
+      const un = (r.items || []).filter(it => !it._pid).map(it => `${it.qty} ${it.raw}`);
+      return un.length ? ' | lines w/o catalog match: ' + un.join('; ').slice(0, 900) : '';
+    })();
   const info = insDO.run(r.doc_key, r.date, c.so_id || null, r.purpose,
     (r.cust_lines && r.cust_lines[0]) || null, note, null,
     r.date + ' 00:00:00', r.date + ' 00:00:00', now, now);

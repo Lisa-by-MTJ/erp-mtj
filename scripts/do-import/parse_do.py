@@ -145,7 +145,7 @@ def parse(path):
 
     # --- customer candidates: text lines then filename tokens ---
     lines = [l.strip() for l in txt.splitlines() if l.strip()]
-    junk = re.compile(r'^(DELIVERY\s*ORDER|DELIVERYORDER|Date|DO\s*#|Invoice|Quotation|DELIVERED\s*TO|Delivered\s*To|CONDITION|\(?\s*(Good|Poor|Not Good|Baik)|NO\s*$|No\.?$|Brand|Type|Description|QTY|Address|Attention|Attn|UP\.|Company|Jl\.|JI\.|Jln|Jakarta|Daerah|Kota|Provinsi|Telepon|Telp|Phone|Email|Fax|Signature|Name|CHECKER|WAREHOUSE|SALES|SECURITY|CUSTOMER\b|Your\s*One|Office:|PT\.\s*ALVINITY|PT\.?\s*ALVINITYSOLU|ALVINITY|ALVINET|\*|Lihat|Please\s*see|WIRELESS|KABEL|MICROPHONE|MIC\b|Speaker|Amplifier|Processor|Cable|Mix(er|Pro))', re.I)
+    junk = re.compile(r'^(DELIVERY\s*ORDER|DELIVERYORDER|Date|DO\s*#|Invoice|Quotation|DELIVERED\s*TO|Delivered\s*To|CONDITION|\(?\s*(Good|Poor|Not Good|Baik)|NO\s*$|No\.?$|No[ .]|BRAND\b|TYPE\b|Description|QTY|Address|Attention|Attn|UP\.|Company|Jl\.|JI\.|Jln|Jakarta|Daerah|Kota|Provinsi|Telepon|Telp|Phone|Email|Fax|Signature|Name|CHECKER|WAREHOUSE|SALES|SECURITY|CUSTOMER\b|Your\s*One|Office:|PT\.\s*ALVINITY|PT\.?\s*ALVINITYSOLU|ALVINITY|ALVINET|\*|Lihat|Please\s*see|WIRELESS|KABEL|MICROPHONE|MIC\b|Speaker|Amplifier|Processor|Cable|Mix(er|Pro)|Dealer\s*Visit)', re.I)
     addr = re.compile(r'\d{5}|\+62|\(\+?62|08\d{2}|@|Kav|Ruko|Blok|Lt\.|Gedung', re.I)
     name_lines = []
     for i, l in enumerate(lines):
