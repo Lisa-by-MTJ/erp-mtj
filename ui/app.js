@@ -261,7 +261,7 @@ window.renderStock = () => {
   else if (sort === 'val-desc') list.sort((a,b) => val(b) - val(a));
   else if (sort === 'brand') list.sort((a,b) => (a.brand||'~').localeCompare(b.brand||'~') || a.code.localeCompare(b.code));
   else if (sort === 'qty-desc') list.sort((a,b) => b.physical - a.physical);
-  tb.innerHTML = list.slice(0, 500).map(r => `<tr><td><a href="#" onclick="go('item-${r.product_id}');return false" style="color:inherit"><b>${esc(r.code)}</b></a></td><td>${esc(r.name)} <span class="mut">${esc(r.brand||'')}</span></td><td class="mut">${esc(r.barcode||'—')}</td><td>${esc(r.wh_name)}</td>
+  tb.innerHTML = list.slice(0, 500).map(r => `<tr><td><a href="#" onclick="go('item-${r.product_id}');return false" style="color:inherit"><b>${esc(r.code)}</b></a></td><td>${r.photo_url ? `<img src="${esc(r.photo_url)}" loading="lazy" style="width:34px;height:34px;object-fit:contain;vertical-align:middle;margin-right:6px;border:1px solid var(--line);border-radius:6px;background:#fff" onerror="this.remove()">` : ''}${esc(r.name)} <span class="mut">${esc(r.brand||'')}</span></td><td class="mut">${esc(r.barcode||'—')}</td><td>${esc(r.wh_name)}</td>
     <td class="money">${r.physical}</td><td class="money">${r.reserved}</td>
     <td class="money"><b class="${r.available<=0?'low':'ok'}">${r.available}</b></td>
     <td class="money">${fmt(r.stock_value)}</td></tr>`).join('') +

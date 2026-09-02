@@ -197,7 +197,7 @@ route('GET', '/api/warehouses', (c) => ok(c.res, rows(`SELECT * FROM warehouses 
 
 // ================= STOCK / INVENTORY (§18-§21) =================
 route('GET', '/api/stock', (c) => ok(c.res, rows(`
-  SELECT ib.product_id, p.code, p.name, p.brand, p.barcode, w.code wh_code, w.name wh_name,
+  SELECT ib.product_id, p.code, p.name, p.brand, p.barcode, p.photo_url, w.code wh_code, w.name wh_name,
          ib.physical, ib.reserved, (ib.physical - ib.reserved) available, ib.avg_cost,
          (ib.physical*ib.avg_cost) stock_value, p.reorder_point
   FROM inventory_balances ib JOIN products p ON p.id=ib.product_id JOIN warehouses w ON w.id=ib.warehouse_id
