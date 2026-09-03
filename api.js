@@ -758,6 +758,245 @@ route('GET', '/api/profitability', (c) => {
   return ok(c.res, list);
 });
 
+// ================= STOCK EXPORT / AGING / SEARCH / REPORTS =================
+
+// ---- CSV helper ----
+function csvEscape(val) {
+  const s = String(val ?? '');
+  if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  return s;
+}
+
+// GET /api/stock/export — CSV export of stock data
+route('GET', '/api/stock/export', (c) => {
+  const headers = ['Code','Name','Brand','EAN','Warehouse','Physical','Reserved','Available','AvgCost','Value','ReorderPoint'];
+  const rs = rows(`
+    SELECT p.code, p.name, p.brand, p.barcode, w.name wh_name,
+           ib.physical, ib.reserved, (ib.physical - ib.reserved) available, ib.avg_cost,
+           (ib.physical * ib.avg_cost) stock_value, p.reorder_point
+    FROM inventory_balances ib JOIN products p ON p.id = ib.product_id JOIN warehouses w ON w.id = ib.warehouse_id
+    ORDER BY p.code`);
+  let csv = headers.join(',') + '\n';
+  for (const r of rs) {
+    csv += [r.code, r.name, r.brand, r.barcode, r.wh_name, r.physical, r.reserved, r.available, r.avg_cost, r.stock_value, r.reorder_point].map(csvEscape).join(',') + '\n';
+  }
+  c.res.writeHead(200, {
+    'Content-Type': 'text/csv',
+    'Content-Disposition': 'attachment; filename="stock_export.csv"'
+  });
+  c.res.end(csv);
+});
+
+// GET /api/stock/aging — stock aging report
+route('GET', '/api/stock/aging', (c) => ok(c.res, ext.stockAging()));
+
+// GET /api/stock-counts — list all count sessions
+route('GET', '/api/stock-counts', (c) => ok(c.res, rows(
+  "SELECT sc.*, w.name warehouse_name FROM stock_counts sc JOIN warehouses w ON w.id = sc.warehouse_id ORDER BY sc.id DESC")));
+
+// POST /api/stock-counts — create a new count session
+route('POST', '/api/stock-counts', async (c) => {
+  if (!requirePerm(c, 'create')) return;
+  const b = await readBody(c.req);
+  if (!b.warehouse_id) return bad(c.res, 400, 'warehouse_id required');
+  try {
+    const no = docNumber('CTR');
+    const info = run(
+      `INSERT INTO stock_counts(count_no, warehouse_id, note) VALUES(?,?,?)`,
+      no, b.warehouse_id, b.note || null);
+    const id = Number(info.lastInsertRowid);
+    // Insert all products with stock in this warehouse
+    const products = rows(
+      `SELECT ib.product_id, ib.physical FROM inventory_balances ib
+       WHERE ib.warehouse_id = ? AND ib.physical > 0`, b.warehouse_id);
+    for (const p of products) {
+      run(
+        `INSERT INTO stock_count_lines(stock_count_id, product_id, system_qty) VALUES(?,?,?)`,
+        id, p.product_id, p.physical);
+    }
+    audit((c.user && c.user.id) || 1, 'stock_counts', 'CREATE', { docNo: no, entity: id });
+    return ok(c.res, { id, count_no: no, lines: products.length });
+  } catch (e) { return bad(c.res, 422, e.message); }
+});
+
+// GET /api/stock-counts/:id — get count session with lines
+route('GET', '/api/stock-counts/:id', (c) => {
+  const id = Number(c.params.id);
+  const sc = one(`SELECT sc.*, w.name warehouse_name FROM stock_counts sc JOIN warehouses w ON w.id = sc.warehouse_id WHERE sc.id=?`, id);
+  if (!sc) return bad(c.res, 404, 'Stock count not found');
+  sc.lines = rows(
+    `SELECT scl.*, p.code product_code, p.name product_name, p.brand product_brand
+     FROM stock_count_lines scl JOIN products p ON p.id = scl.product_id
+     WHERE scl.stock_count_id = ?`, id);
+  return ok(c.res, sc);
+});
+
+// POST /api/stock-counts/:id/lines — update counted quantities
+route('POST', '/api/stock-counts/:id/lines', async (c) => {
+  if (!requirePerm(c, 'create')) return;
+  const id = Number(c.params.id);
+  const sc = one(`SELECT * FROM stock_counts WHERE id=?`, id);
+  if (!sc) return bad(c.res, 404, 'Stock count not found');
+  if (sc.status === 'POSTED') return bad(c.res, 422, 'Cannot modify posted count');
+  const b = await readBody(c.req);
+  if (!b.lines || !Array.isArray(b.lines)) return bad(c.res, 400, 'lines array required');
+  for (const l of b.lines) {
+    const variance = l.counted_qty != null ? l.counted_qty - l.system_qty : null;
+    run(
+      `UPDATE stock_count_lines SET counted_qty = ?, variance = ?, note = ?
+       WHERE stock_count_id = ? AND product_id = ?`,
+      l.counted_qty, variance, l.note || null, id, l.product_id);
+  }
+  run(`UPDATE stock_counts SET status = 'COUNTED' WHERE id = ? AND status = 'OPEN'`, id);
+  audit((c.user && c.user.id) || 1, 'stock_counts', 'UPDATE_LINES', { entity: id });
+  return ok(c.res, { updated: b.lines.length });
+});
+
+// POST /api/stock-counts/:id/post — post the count, apply adjustments
+route('POST', '/api/stock-counts/:id/post', async (c) => {
+  if (!requirePerm(c, 'workflow')) return;
+  const id = Number(c.params.id);
+  const sc = one(`SELECT * FROM stock_counts WHERE id=?`, id);
+  if (!sc) return bad(c.res, 404, 'Stock count not found');
+  if (sc.status === 'POSTED') return bad(c.res, 422, 'Already posted');
+  const lines = rows(`SELECT * FROM stock_count_lines WHERE stock_count_id = ? AND variance IS NOT NULL AND variance != 0`, id);
+  for (const l of lines) {
+    moveStock({
+      productId: l.product_id,
+      warehouseId: sc.warehouse_id,
+      qtyDelta: l.variance,
+      type: 'ADJUSTMENT',
+      refTable: 'stock_counts',
+      refId: id,
+      refNo: sc.count_no,
+      userId: (c.user && c.user.id) || 1
+    });
+  }
+  run(`UPDATE stock_counts SET status = 'POSTED', posted_by = ?, posted_at = datetime('now') WHERE id = ?`,
+      (c.user && c.user.id) || 1, id);
+  audit((c.user && c.user.id) || 1, 'stock_counts', 'POST', { docNo: sc.count_no, entity: id });
+  return ok(c.res, { posted: true, adjustments: lines.length });
+});
+
+// GET /api/search?q=... — global search
+route('GET', '/api/search', (c) => {
+  const q = c.url.searchParams.get('q');
+  if (!q || q.length < 2) return bad(c.res, 400, 'q parameter must be at least 2 characters');
+  const pattern = '%' + q + '%';
+  const results = [];
+  // Products
+  const prods = rows(`SELECT id, code, name, brand FROM products WHERE code LIKE ? OR name LIKE ? OR brand LIKE ? LIMIT 10`, pattern, pattern, pattern);
+  for (const p of prods) results.push({ type: 'product', id: p.id, label: `${p.code} — ${p.name}${p.brand ? ' (' + p.brand + ')' : ''}`, module: 'products' });
+  // Business partners
+  const parts = rows(`SELECT id, code, name FROM business_partners WHERE name LIKE ? OR code LIKE ? LIMIT 10`, pattern, pattern);
+  for (const bp of parts) results.push({ type: 'partner', id: bp.id, label: `${bp.code} — ${bp.name}`, module: 'business_partners' });
+  // CRM leads
+  const leads = rows(`SELECT id, lead_no, company FROM crm_leads WHERE company LIKE ? OR lead_no LIKE ? LIMIT 5`, pattern, pattern);
+  for (const l of leads) results.push({ type: 'lead', id: l.id, label: `${l.lead_no || ''} — ${l.company}`, module: 'crm_leads' });
+  // Sales orders
+  const sos = rows(`SELECT id, doc_no FROM sales_orders WHERE doc_no LIKE ? LIMIT 5`, pattern);
+  for (const s of sos) results.push({ type: 'sales_order', id: s.id, label: s.doc_no, module: 'sales_orders' });
+  // Quotations
+  const qts = rows(`SELECT id, doc_no FROM quotations WHERE doc_no LIKE ? LIMIT 5`, pattern);
+  for (const q of qts) results.push({ type: 'quotation', id: q.id, label: q.doc_no, module: 'quotations' });
+  // Purchase orders
+  const pos = rows(`SELECT id, doc_no FROM purchase_orders WHERE doc_no LIKE ? LIMIT 5`, pattern);
+  for (const p of pos) results.push({ type: 'purchase_order', id: p.id, label: p.doc_no, module: 'purchase_orders' });
+  return ok(c.res, results.slice(0, 20));
+});
+
+// GET /api/warehouse-summary — per-warehouse summary
+route('GET', '/api/warehouse-summary', (c) => ok(c.res, ext.warehouseSummary()));
+
+// GET /api/reports/:type — CSV reports
+route('GET', '/api/reports/:type', (c) => {
+  const type = c.params.type;
+  if (!['stock', 'sales', 'invoices'].includes(type)) return bad(c.res, 400, 'type must be stock, sales, or invoices');
+  let headers, data;
+  if (type === 'stock') {
+    headers = ['Code','Name','Brand','EAN','Warehouse','Physical','Reserved','Available','AvgCost','Value','ReorderPoint'];
+    data = rows(
+      `SELECT p.code, p.name, p.brand, p.barcode, w.name wh_name,
+              ib.physical, ib.reserved, (ib.physical - ib.reserved) available, ib.avg_cost,
+              (ib.physical * ib.avg_cost) stock_value, p.reorder_point
+       FROM inventory_balances ib JOIN products p ON p.id = ib.product_id JOIN warehouses w ON w.id = ib.warehouse_id
+       ORDER BY p.code`);
+    data = data.map(r => [r.code, r.name, r.brand, r.barcode, r.wh_name, r.physical, r.reserved, r.available, r.avg_cost, r.stock_value, r.reorder_point]);
+  } else if (type === 'sales') {
+    headers = ['DocNo','Date','Customer','Type','Tax','Subtotal','TaxAmount','GrandTotal','Status','PaidAmount'];
+    data = rows(
+      `SELECT d.doc_no, d.so_date, bp.name customer, d.sales_type, d.tax_code,
+              d.subtotal, d.tax_amount, d.grand_total, d.status, d.paid_amount
+       FROM sales_orders d LEFT JOIN business_partners bp ON bp.id = d.customer_id
+       ORDER BY d.so_date DESC`);
+    data = data.map(r => [r.doc_no, r.date, r.customer, r.type, r.tax_code, r.subtotal, r.tax_amount, r.grand_total, r.status, r.paid_amount]);
+  } else {
+    headers = ['DocNo','Date','Customer','InvoiceRef','GrandTotal','Status'];
+    data = rows(
+      `SELECT d.doc_no, d.so_date, bp.name customer, d.invoice_ref, d.grand_total, d.status
+       FROM sales_orders d LEFT JOIN business_partners bp ON bp.id = d.customer_id
+       WHERE d.invoice_ref IS NOT NULL
+       ORDER BY d.so_date DESC`);
+    data = data.map(r => [r.doc_no, r.date, r.customer, r.invoice_ref, r.grand_total, r.status]);
+  }
+  let csv = headers.join(',') + '\n';
+  for (const row of data) csv += row.map(csvEscape).join(',') + '\n';
+  c.res.writeHead(200, {
+    'Content-Type': 'text/csv',
+    'Content-Disposition': 'attachment; filename="' + type + '_report.csv"'
+  });
+  c.res.end(csv);
+});
+
+// GET /api/docs/:table/:id/template — structured document data for PDF generation
+route('GET', '/api/docs/:table/:id/template', (c) => {
+  const t = c.params.table, id = Number(c.params.id);
+  const company = {
+    name: 'PT Monalisa Tunggal Jaya',
+    address: 'Jl. Gajah Mada No.156, Keagungan, Taman Sari, Jakarta Barat 11520',
+    phone: '+62 21 6290170',
+    website: 'ptmtj.com'
+  };
+  if (t === 'quotations') {
+    const doc = one(`SELECT q.*, bp.name customer_name, bp.address customer_address, bp.phone customer_phone
+      FROM quotations q JOIN business_partners bp ON bp.id = q.customer_id WHERE q.id=?`, id);
+    if (!doc) return bad(c.res, 404, 'Not found');
+    const lines = rows(
+      `SELECT ql.*, p.code product_code, p.name product_name, p.brand product_brand
+       FROM quotation_lines ql JOIN products p ON p.id = ql.product_id WHERE ql.quotation_id=?`, id);
+    return ok(c.res, { company, document: doc, lines, type: 'quotation' });
+  }
+  if (t === 'sales_orders') {
+    const doc = one(`SELECT so.*, bp.name customer_name, bp.address customer_address, bp.phone customer_phone
+      FROM sales_orders so JOIN business_partners bp ON bp.id = so.customer_id WHERE so.id=?`, id);
+    if (!doc) return bad(c.res, 404, 'Not found');
+    const lines = rows(
+      `SELECT sl.*, p.code product_code, p.name product_name, p.brand product_brand
+       FROM sales_order_lines sl JOIN products p ON p.id = sl.product_id WHERE sl.sales_order_id=?`, id);
+    return ok(c.res, { company, document: doc, lines, type: 'sales_order' });
+  }
+  if (t === 'delivery_orders') {
+    const doc = one(`SELECT d.*, bp.name customer_name, bp.address customer_address, bp.phone customer_phone,
+           s.doc_no so_doc_no
+      FROM delivery_orders d
+      LEFT JOIN sales_orders s ON s.id = d.sales_order_id
+      LEFT JOIN business_partners bp ON bp.id = COALESCE(d.customer_id, s.customer_id)
+      WHERE d.id=?`, id);
+    if (!doc) return bad(c.res, 404, 'Not found');
+    const lines = rows(
+      `SELECT dl.*, p.code product_code, p.name product_name, p.brand product_brand
+       FROM delivery_order_lines dl JOIN products p ON p.id = dl.product_id WHERE dl.delivery_order_id=?`, id);
+    return ok(c.res, { company, document: doc, lines, type: 'delivery_order' });
+  }
+  return bad(c.res, 400, 'table must be quotations, sales_orders, or delivery_orders');
+});
+
+// POST /api/sync/drive — trigger drive stock sync (placeholder)
+route('POST', '/api/sync/drive', (c) => ok(c.res, { status: 'ok', message: 'Sync triggered. Check /api/stock for updated data.' }));
+
+
 // ---------- dispatcher ----------
 async function handle(req, res, url, user) {
   const pathParts = url.pathname.split('/').filter(Boolean).slice(1); // strip 'api'

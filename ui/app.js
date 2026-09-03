@@ -130,8 +130,15 @@ views.dash = async () => {
       ${kcell('Local / Import', fmt(s.local_purchase) + ' / ' + fmt(s.import_purchase), { go: 'docs' })}
     </div>
 
-    <div class="srow"><div class="rn">8</div>${sec('Analisis')}</div>
+    <div class="srow"><div class="rn">8</div>${sec('Warehouse Summary')}</div>
     <div class="srow"><div class="rn">9</div>
+      ${gcell(`<div style="font-size:12px;line-height:1.8">${(d.warehouse_summary || []).map(wh =>
+        `<div><b>${esc(wh.name)}</b> — ${wh.item_count || 0} items · ${fmt(wh.total_value || 0)}${wh.low_stock_count > 0 ? ` · <span style="color:#8a1c1c">${wh.low_stock_count} low stock</span>` : ''}</div>`
+      ).join('') || '<span class="dim">no warehouse data</span>'}</div>`, { span: 6 })}
+    </div>
+
+    <div class="srow"><div class="rn">10</div>${sec('Analisis')}</div>
+    <div class="srow"><div class="rn">11</div>
       ${gcell(`<div class="klbl" style="color:var(--mut);font-size:10.5px;text-transform:uppercase;letter-spacing:.07em">12-Month Sales Trend</div><div class="minibars">${bars}</div>`, { span: 4 })}
       ${gcell(`<div class="klbl" style="color:var(--mut);font-size:10.5px;text-transform:uppercase;letter-spacing:.07em">Top Products</div><div style="font-size:11.5px;line-height:1.9">${tops}</div>`, { span: 2 })}
     </div>
@@ -177,8 +184,11 @@ views.stock = async () => {
     <td class="mut">${m.ref_no||''}</td></tr>`).join('')}</table>`
     : emptyState('📭', 'Belum ada pergerakan stok.');
   main.innerHTML = `<div class="viewhead"><h1>Stock &amp; Inventory</h1>
-    <div class="vh-actions"><button class="btn" onclick="const f=document.getElementById('pform');f.classList.toggle('open');if(f.classList.contains('open'))f.querySelector('input').focus()">＋ Tambah Barang</button></div></div>
+    <div class="vh-actions"><button class="btn gray sm" onclick="exportStock()">📥 Export CSV</button><button class="btn" onclick="const f=document.getElementById('pform');f.classList.toggle('open');if(f.classList.contains('open'))f.querySelector('input').focus()">＋ Tambah Barang</button></div></div>
   <div class="sub">§18 Available = Physical − Reserved · §20 every change is a stock movement · klik kode barang untuk detail</div>
+  <div class="bulk-bar" id="bulk-bar"><span class="bulk-count" id="bulk-count">0</span> selected
+    <button class="btn sm gray" onclick="exportSelected()">📥 Export Selected</button>
+  </div>
   <div class="formbox" id="pform">
     <b>Master Barang Baru</b>
     <form onsubmit="return addProduct(event)">
@@ -261,11 +271,11 @@ window.renderStock = () => {
   else if (sort === 'val-desc') list.sort((a,b) => val(b) - val(a));
   else if (sort === 'brand') list.sort((a,b) => (a.brand||'~').localeCompare(b.brand||'~') || a.code.localeCompare(b.code));
   else if (sort === 'qty-desc') list.sort((a,b) => b.physical - a.physical);
-  tb.innerHTML = list.slice(0, 500).map(r => { const th = r.photo_url ? r.photo_url.replace('/products/', '/products/_t/') : ''; return `<tr><td><a href="#" onclick="go('item-${r.product_id}');return false" style="color:inherit"><b>${esc(r.code)}</b></a></td><td>${th ? `<img src="${esc(th)}" data-full="${esc(r.photo_url)}" class="st-thumb" loading="lazy" onerror="this.remove()">` : ''}${esc(r.name)} <span class="mut">${esc(r.brand||'')}</span></td><td class="mut">${esc(r.barcode||'—')}</td><td>${esc(r.wh_name)}</td>
+  tb.innerHTML = list.slice(0, 500).map(r => { const th = r.photo_url ? r.photo_url.replace('/products/', '/products/_t/') : ''; return `<tr><td><input type="checkbox" class="bulk-cb" data-pid="${r.product_id}" onchange="updateBulkBar()"></td><td><a href="#" onclick="go('item-${r.product_id}');return false" style="color:inherit"><b>${esc(r.code)}</b></a></td><td>${th ? `<img src="${esc(th)}" data-full="${esc(r.photo_url)}" class="st-thumb" loading="lazy" onerror="this.remove()">` : ''}${esc(r.name)} <span class="mut">${esc(r.brand||'')}</span></td><td class="mut">${esc(r.barcode||'—')}</td><td>${esc(r.wh_name)}</td>
     <td class="money">${r.physical}</td><td class="money">${r.reserved}</td>
     <td class="money"><b class="${r.available<=0?'low':'ok'}">${r.available}</b></td>
     <td class="money">${fmt(r.stock_value)}</td></tr>`; }).join('') +
-    (list.length > 500 ? `<tr><td colspan="8" class="mut">… ${list.length - 500} baris lagi — persempit filter</td></tr>` : '');
+    (list.length > 500 ? `<tr><td colspan="9" class="mut">… ${list.length - 500} baris lagi — persempit filter</td></tr>` : '');
 };
 // hover-zoom preview for stock thumbnails
 (() => {
@@ -304,6 +314,23 @@ window.addProduct = async ev => {
     f.reset(); document.getElementById('pform').classList.remove('open');
   } catch (e) { toast(e.message, true); }
   return false;
+};
+
+// ---- Bulk Actions helpers ----
+window.updateBulkBar = () => {
+  const checked = document.querySelectorAll('.bulk-cb:checked');
+  const bar = document.getElementById('bulk-bar');
+  const count = document.getElementById('bulk-count');
+  if (bar && count) {
+    count.textContent = checked.length;
+    bar.classList.toggle('show', checked.length > 0);
+  }
+};
+window.getSelectedProducts = () => [...document.querySelectorAll('.bulk-cb:checked')].map(cb => cb.dataset.pid);
+window.exportSelected = () => {
+  const ids = getSelectedProducts();
+  if (!ids.length) return;
+  window.open('/api/stock/export?ids=' + ids.join(','), '_blank');
 };
 
 views.docs = async () => {
@@ -1105,5 +1132,194 @@ window.lisaSend = async () => {
   }
 };
 $('#lisa-q').addEventListener('keydown', ev => { if (ev.key === 'Enter') lisaSend(); });
+
+// ---- Dark Mode ----
+(() => {
+  const toggle = document.createElement('button');
+  toggle.id = 'dark-toggle';
+  toggle.textContent = '🌙';
+  toggle.title = 'Toggle dark mode';
+  toggle.onclick = () => {
+    document.body.classList.toggle('dark');
+    const isDark = document.body.classList.contains('dark');
+    toggle.textContent = isDark ? '☀️' : '🌙';
+    try { localStorage.setItem('dark_mode', isDark ? '1' : '0'); } catch(e) {}
+  };
+  document.addEventListener('DOMContentLoaded', () => {
+    const tb = document.getElementById('topbar');
+    if (tb) tb.appendChild(toggle);
+    try { if (localStorage.getItem('dark_mode') === '1') { document.body.classList.add('dark'); toggle.textContent = '☀️'; } } catch(e) {}
+  });
+})();
+
+// ---- Global Search Bar ----
+(() => {
+  document.addEventListener('DOMContentLoaded', () => {
+    const nav = document.getElementById('nav');
+    if (!nav) return;
+    const wrap = document.createElement('div');
+    wrap.id = 'gsearch-wrap';
+    wrap.innerHTML = '<input id="gsearch" placeholder="🔍 Search…">';
+    const results = document.createElement('div');
+    results.id = 'search-results';
+    wrap.appendChild(results);
+    nav.appendChild(wrap);
+
+    let debounce = null;
+    const inp = document.getElementById('gsearch');
+    inp.addEventListener('input', () => {
+      clearTimeout(debounce);
+      const q = inp.value.trim();
+      if (!q) { results.style.display = 'none'; return; }
+      debounce = setTimeout(async () => {
+        try {
+          const data = await api('/search?q=' + encodeURIComponent(q));
+          if (!data.length) { results.innerHTML = '<div class="sr-item mut" style="text-align:center">No results</div>'; results.style.display = 'block'; return; }
+          results.innerHTML = data.map(r =>
+            `<div class="sr-item" onclick="go('${r.view}');document.getElementById('search-results').style.display='none';document.getElementById('gsearch').value=''">
+              <div class="sr-type">${esc(r.type)}</div>
+              <div>${esc(r.label)}</div>
+            </div>`
+          ).join('');
+          results.style.display = 'block';
+        } catch (e) { results.style.display = 'none'; }
+      }, 300);
+    });
+    inp.addEventListener('blur', () => setTimeout(() => results.style.display = 'none', 200));
+    inp.addEventListener('keydown', ev => {
+      if (ev.key === 'Escape') { results.style.display = 'none'; inp.blur(); }
+    });
+  });
+})();
+
+// ---- Stock Export ----
+window.exportStock = () => { window.open('/api/stock/export', '_blank'); };
+
+// ---- Stock Count View ----
+views.stockcount = async () => {
+  let sessions = [];
+  try { sessions = await api('/stock-counts'); } catch(e) { /* empty */ }
+  const warehouses = WAREHOUSES.length ? WAREHOUSES : (await api('/warehouses'));
+  const whOpts = opt(warehouses, 'id', w => w.name);
+  main.innerHTML = `
+  <div class="viewhead"><h1>Stock Count</h1></div>
+  <div class="sub">Physical count vs system qty — variance highlights discrepancies</div>
+  <div class="formbox"><b>New Count Session</b>
+    <form onsubmit="return createStockCount(event)">
+      <div class="row">
+        <div style="flex:2"><label>Warehouse</label><select id="sc-wh">${whOpts}</select></div>
+        <div style="align-self:flex-end"><button class="btn" type="submit">Start Count</button></div>
+      </div>
+    </form>
+  </div>
+  <h2>Count Sessions</h2>
+  ${sessions.length ? `<table><tr><th>ID</th><th>Warehouse</th><th>Date</th><th>Status</th><th>Lines</th><th></th></tr>
+  ${sessions.map(s => `<tr><td><b>#${s.id}</b></td><td>${esc(s.wh_name||'')}</td><td>${s.count_date||''}</td>
+    <td>${badge(s.status)}</td><td>${s.line_count||0}</td>
+    <td>${s.status==='DRAFT'?`<button class="btn sm" onclick="openStockCount(${s.id})">Open</button>`:''}
+        ${s.status==='DRAFT'?`<button class="btn sm" onclick="postStockCount(${s.id})">Post</button>`:''}</td></tr>`).join('')}</table>`
+  : emptyState('📋', 'No count sessions yet. Create one above.')}
+  <div id="sc-lines"></div>`;
+};
+window.createStockCount = async ev => {
+  ev.preventDefault();
+  try {
+    const r = await api('/stock-counts', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ warehouse_id: +$('#sc-wh').value }) });
+    toast(`Count #${r.id} created`);
+    openStockCount(r.id);
+  } catch (e) { toast(e.message, true); }
+  return false;
+};
+window.openStockCount = async id => {
+  try {
+    const data = await api('/stock-counts/' + id);
+    const lines = data.lines || [];
+    const html = `<h2>Count #${id} — ${esc(data.wh_name||'')}</h2>
+    <table><tr><th>Code</th><th>Product</th><th class="money">System Qty</th><th>Counted</th><th class="money">Variance</th></tr>
+    ${lines.map(l => `<tr><td><b>${esc(l.code)}</b></td><td>${esc(l.product_name)}</td>
+      <td class="money">${l.system_qty}</td>
+      <td><input type="number" min="0" value="${l.counted_qty ?? ''}" style="width:70px" onchange="updateCountLine(${id},${l.id},this.value)"></td>
+      <td class="money ${l.variance > 0 ? 'ok' : l.variance < 0 ? 'low' : ''}">${l.variance ?? '—'}</td></tr>`).join('')}
+    </table>`;
+    $('#sc-lines').innerHTML = html;
+  } catch (e) { toast(e.message, true); }
+};
+window.updateCountLine = async (sessionId, lineId, qty) => {
+  try {
+    await api(`/stock-counts/${sessionId}/lines/${lineId}`, { method: 'POST',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ counted_qty: Number(qty) }) });
+    openStockCount(sessionId);
+  } catch (e) { toast(e.message, true); }
+};
+window.postStockCount = async id => {
+  if (!confirm('Post this count? Variance will create stock movements.')) return;
+  try {
+    await api(`/stock-counts/${id}/post`, { method: 'POST' });
+    toast('Count posted');
+    views.stockcount();
+  } catch (e) { toast(e.message, true); }
+};
+
+// ---- Stock Aging View ----
+views.stockaging = async () => {
+  let data = [];
+  try { data = await api('/stock/aging'); } catch(e) { /* empty */ }
+  const colorClass = days => {
+    if (days < 30) return 'ok';
+    if (days < 90) return '';
+    if (days < 180) return '';
+    return 'low';
+  };
+  const colorStyle = days => {
+    if (days < 30) return 'color:#1b7a3d';
+    if (days < 90) return 'color:#b26a00';
+    if (days < 180) return 'color:#d47600';
+    return 'color:#8a1c1c;font-weight:700';
+  };
+  main.innerHTML = `
+  <div class="viewhead"><h1>Stock Aging Report</h1></div>
+  <div class="sub">Products sorted by days since last movement · Green &lt;30d · Yellow 30-90d · Orange 90-180d · Red &gt;180d</div>
+  ${data.length ? `<table><tr><th>Code</th><th>Product</th><th>Warehouse</th><th class="money">Qty</th>
+    <th class="money">Value</th><th class="money">Idle Days</th><th>Last Movement</th></tr>
+  ${data.map(r => {
+    const days = r.idle_days ?? r.days_since_last ?? 0;
+    return `<tr><td><a href="#" onclick="go('item-${r.product_id}');return false" style="color:inherit"><b>${esc(r.code)}</b></a></td>
+      <td>${esc(r.product_name||r.name)} <span class="mut">${esc(r.brand||'')}</span></td>
+      <td>${esc(r.wh_name)}</td>
+      <td class="money">${r.qty ?? r.physical ?? 0}</td>
+      <td class="money">${fmt(r.stock_value ?? r.value ?? 0)}</td>
+      <td class="money" style="${colorStyle(days)}">${days}d</td>
+      <td class="mut">${r.last_movement || r.last_moved || '—'}</td></tr>`;
+  }).join('')}</table>`
+  : emptyState('📈', 'No aging data available. Requires stock movements to calculate idle days.')}`;
+};
+
+// ---- Reports View ----
+views.reports = async () => {
+  main.innerHTML = `
+  <div class="viewhead"><h1>Reports &amp; Exports</h1></div>
+  <div class="sub">Download CSV reports for stock, sales, and invoices</div>
+  <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(260px,1fr))">
+    <div class="kpi jump" onclick="window.open('/api/stock/export','_blank')" style="cursor:pointer">
+      <div class="lbl">📦 Stock Report</div>
+      <div class="val" style="font-size:16px">Export CSV</div>
+      <div class="ksub">Full stock list with qty, value, warehouse breakdown</div>
+    </div>
+    <div class="kpi jump" onclick="window.open('/api/reports/sales/export','_blank')" style="cursor:pointer">
+      <div class="lbl">💰 Sales Report</div>
+      <div class="val" style="font-size:16px">Export CSV</div>
+      <div class="ksub">Sales orders with revenue, customer, date range</div>
+    </div>
+    <div class="kpi jump" onclick="window.open('/api/reports/invoices/export','_blank')" style="cursor:pointer">
+      <div class="lbl">🧾 Invoice Report</div>
+      <div class="val" style="font-size:16px">Export CSV</div>
+      <div class="ksub">Invoice list with amounts, payment status</div>
+    </div>
+  </div>`;
+};
+
+// ---- Global Search View ----
+views.search = async () => { go('dash'); };
 
 go('dash');

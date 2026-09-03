@@ -217,6 +217,98 @@ table.acts td{padding:7px 10px}
 .leadcard .lpic{font-size:11px;margin:2px 0}
 .leadcard .lacts{display:flex;flex-wrap:wrap;gap:4px;margin-top:7px}
 .leadcard .lacts .btn{margin:0;padding:3px 7px;font-size:10px}
+
+/* ---- Mobile Responsive ---- */
+@media (max-width: 768px) {
+  body { flex-direction: column; }
+  nav { width: 100% !important; height: auto; position: relative; flex-direction: row; display: flex; flex-wrap: wrap; padding: 8px 0; }
+  nav::after { display: none; }
+  nav a { padding: 8px 12px; border-left: none; border-bottom: 2px solid transparent; font-size: 11px; flex: 0 0 auto; }
+  nav a.on { border-left: none; border-bottom: 2px solid #ff8a2a; }
+  .logo { padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,.18); }
+  .logo img { width: 28px; }
+  main { padding: 14px 12px; }
+  .grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  table { font-size: 11px; display: block; overflow-x: auto; }
+  form .row { flex-direction: column; gap: 6px; }
+  .kpi { padding: 10px; }
+  .kpi .val { font-size: 16px; }
+  .welcome { flex-direction: column; text-align: center; padding: 18px; }
+  .welcome img { width: 50px; }
+  .welcome h1 { font-size: 17px; }
+  #topbar { padding: 6px 12px; }
+  .btn { padding: 6px 10px; font-size: 11px; }
+  .btn.sm { padding: 3px 7px; font-size: 10px; }
+  .pipeline { flex-direction: column; }
+  .pcol { min-width: 100%; }
+}
+
+@media (max-width: 480px) {
+  .grid { grid-template-columns: 1fr; }
+  nav a span.lbl { display: none; }
+  nav a { font-size: 16px; padding: 10px; }
+}
+
+/* ---- Dark Mode ---- */
+body.dark {
+  --bg: #0f1117;
+  --panel: #1a1d2e;
+  --panel2: #2a2f45;
+  --card: #1e2133;
+  --line: #2e3148;
+  --txt: #e0e0e8;
+  --mut: #8a8da0;
+  --hi: #6b8cff;
+  --soft: #252840;
+  --grad: linear-gradient(160deg, #1a1d2e 0%, #2a2f45 58%, #3a4060 100%);
+}
+body.dark nav { background: var(--grad); }
+body.dark .kpi { border-top-color: var(--panel2); }
+body.dark .kpi .val { background: linear-gradient(120deg, #6b8cff, #9bb8ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+body.dark th { background: linear-gradient(120deg, #252840, #2e3148); color: #b0b3c8; }
+body.dark tr:hover td { background: #252840; }
+body.dark input, body.dark select { background: #252840; color: var(--txt); border-color: var(--line); }
+body.dark .formbox { background: var(--card); }
+body.dark #toast { background: linear-gradient(135deg, #1a1d2e, #2a2f45); }
+body.dark #toast.err { background: #2a1520; color: #ff6b6b; border-color: #ff6b6b; }
+body.dark .badge.b-POSTED, body.dark .badge.b-ACTIVE, body.dark .badge.b-PAID, body.dark .badge.b-RESERVED { background: linear-gradient(135deg, #3a4060, #4a5080); border-color: #4a5080; }
+body.dark .welcome { box-shadow: 0 8px 28px rgba(0,0,0,.5); }
+body.dark #whoami { background: var(--card); border-color: var(--line); }
+body.dark #topbar { background: rgba(15,17,23,.88); }
+body.dark .modalcard { background: var(--card); border-color: var(--line); }
+body.dark .leadcard { background: var(--card); border-color: var(--line); }
+body.dark #imgzoom { background: var(--card); border-color: var(--line); }
+
+/* ---- Global Search ---- */
+#gsearch-wrap { position: relative; }
+#gsearch { width: 100%; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.18); color: #fff; padding: 6px 10px; border-radius: 6px; font-size: 12px; margin: 6px 12px; width: calc(100% - 24px); }
+#gsearch::placeholder { color: rgba(255,255,255,.45); }
+#gsearch:focus { outline: none; border-color: #ff8a2a; background: rgba(255,255,255,.18); }
+body.dark #gsearch { background: rgba(255,255,255,.06); border-color: var(--line); color: var(--txt); }
+body.dark #gsearch::placeholder { color: var(--mut); }
+#search-results { position: absolute; top: 100%; left: 12px; right: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; max-height: 300px; overflow-y: auto; z-index: 15; display: none; box-shadow: 0 8px 24px rgba(0,0,0,.25); }
+#search-results .sr-item { padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--line); font-size: 12px; color: var(--txt); }
+#search-results .sr-item:hover { background: var(--soft); }
+#search-results .sr-type { font-size: 10px; color: var(--mut); text-transform: uppercase; letter-spacing: .06em; }
+
+/* ---- Bulk Actions ---- */
+.bulk-bar { background: var(--soft); border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px; margin: 8px 0; display: none; align-items: center; gap: 10px; font-size: 12px; }
+.bulk-bar.show { display: flex; }
+.bulk-bar .bulk-count { font-weight: 700; color: var(--hi); }
+.bulk-cb { width: 16px; height: 16px; cursor: pointer; accent-color: var(--hi); }
+
+/* ---- Dark Mode Toggle ---- */
+#dark-toggle { background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.2); color: #fff; border-radius: 50%; width: 30px; height: 30px; cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; margin-left: 8px; flex-shrink: 0; }
+#dark-toggle:hover { background: rgba(255,255,255,.2); }
+
+/* ---- Print ---- */
+@media print {
+  nav, #topbar, #toast, .btn, #dark-toggle, #gsearch-wrap, .bulk-bar { display: none !important; }
+  body { display: block; }
+  main { padding: 0; max-width: 100%; }
+  table { page-break-inside: auto; }
+  tr { page-break-inside: avoid; }
+}
 </style>
 </head>
 <body>
@@ -236,6 +328,9 @@ table.acts td{padding:7px 10px}
  <a data-v="profit">💰 <span class="lbl">Profitability</span></a>
  <a data-v="audit">🔐 <span class="lbl">Audit Trail</span></a>
  <a data-v="users" style="display:none">👥 <span class="lbl">Users &amp; Access</span></a>
+ <a data-v="reports">📊 <span class="lbl">Reports</span></a>
+ <a data-v="stockcount">📋 <span class="lbl">Stock Count</span></a>
+ <a data-v="stockaging">📈 <span class="lbl">Stock Aging</span></a>
 </nav>
 <div id="content">
 <div id="topbar"></div>
