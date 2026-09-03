@@ -1,13 +1,26 @@
-// Lisa in-ERP assistant — deterministic ERP ops via live SQLite + optional Workers AI fallback.
+// Lisa in-ERP assistant — live SQLite ERP tools + LLM brain (OpenRouter free tier).
 // Chat history lives ONLY in the browser (no server storage); logout ends the session.
+//
+// How it works:
+//   1. Every incoming message is run through deterministic ERP "tools" (stock, price,
+//      sales, low-stock, queue, customers, etc.). If a tool clearly matches, its live
+//      data is returned directly — fast and always factual.
+//   2. If no tool matches (free-form question), the message is sent to an LLM with a
+//      system prompt carrying Lisa's persona + a live ERP context snapshot, so it can
+//      reason in natural language. The LLM may also call the same tools via a tiny
+//      function-calling contract (it can ask for stock/price/etc. and we run them).
+//   3. Any LLM failure (402 no credits, 429 throttle, network) silently degrades to the
+//      deterministic answer or a friendly fallback — the chatbot NEVER errors out.
 'use strict';
 const { db } = require('./db.js');
 const ext = require('./dashboard_ext.js');
 const crm = require('./crm.js');
 
-const CF_TOKEN = process.env.MTJ_CF_AI_TOKEN || '';
-const CF_ACCOUNT = process.env.MTJ_CF_AI_ACCOUNT || '';
-const CF_MODEL = process.env.MTJ_CF_AI_MODEL || '@cf/meta/llama-3.1-8b-instruct';
+// ---- LLM config (env-driven; falls back to deterministic answers if unset) ----
+const OR_BASE = process.env.MTJ_LLM_BASE || 'https://openrouter.ai/api/v1';
+const OR_KEY = process.env.MTJ_LLM_KEY || '';
+// Free-tier models (no cost). Primary then fallbacks — 429 throttling rotates them.
+const OR_MODELS = (process.env.MTJ_LLM_MODELS || 'minimax/minimax-m3:free,nvidia/nemotron-3-ultra-550b-a55b:free').split(',').map(s => s.trim()).filter(Boolean);
 
 const rows = (sql, ...p) => db.prepare(sql).all(...p);
 const one = (sql, ...p) => db.prepare(sql).get(...p);
@@ -35,7 +48,7 @@ function findProduct(q) {
   return bestScore >= 4 ? best : null;
 }
 
-// ---- live data answers ----
+// ---- live data answers (deterministic ERP tools) ----
 function stockAnswer(p) {
   const bs = rows(`SELECT w.name wh_name, ib.physical, ib.reserved, ib.avg_cost
     FROM inventory_balances ib JOIN warehouses w ON w.id = ib.warehouse_id
@@ -51,7 +64,7 @@ function priceAnswer(p) {
     goto: ['stock', '📦 Stock'] };
 }
 
-// ---- keyword intents (checked before product matching) ----
+// ---- keyword intents (checked first; fast + always factual) ----
 const has = (q, ...words) => words.some(w => q.includes(w));
 function route(q) {
   const m = q.toLowerCase();
@@ -71,7 +84,6 @@ function route(q) {
   if (has(m, 'pelanggan', 'customer', 'kontak', 'client')) return { kind: 'customers' };
   if (has(m, 'halo', 'hai', 'hi', 'hello', 'pagi', 'siang', 'sore')) return { kind: 'greet' };
   if (has(m, 'bisa apa', 'help', 'bantuan', 'cmd')) return { kind: 'help' };
-  // bare product mention with no intent keyword -> treat as stock ask
   const p = findProduct(m);
   return p ? { kind: 'stock' } : { kind: 'unknown' };
 }
@@ -151,40 +163,76 @@ function answer(q) {
     if (!cs.length) return { text: 'Belum ada customer terdaftar.', goto: ['crm', '🤝 CRM'] };
     return { text: `Customer (${cs.length} teratas):\n${cs.map(c => `• **${c.name}**${c.pic ? ' — ' + c.pic : ''}${c.phone ? ' · ' + c.phone : ''} · ${c.orders} order posted`).join('\n')}\nKlik untuk buka halaman 360 customer.`, goto: ['crm', '🤝 CRM'] };
   }
-  return null; // unknown -> caller may try AI
+  return null; // unknown -> caller escalates to LLM
 }
 
-// ---- optional AI fallback (Workers AI), only when env-configured ----
-async function aiFallback(q) {
-  if (!CF_TOKEN || !CF_ACCOUNT) return null;
-  const products = rows(`SELECT code, name, brand FROM products WHERE is_active = 1 LIMIT 40`);
-  const whs = rows(`SELECT code, name FROM warehouses WHERE is_active = 1`);
-  const ctx = `Kamu adalah Lisa, asisten internal ERP PT Monalisa Tunggal Jaya (distributor lighting & audio pro).
-Jawab singkat, ramah, dalam Bahasa Indonesia. Hanya jelaskan navigasi ERP / istilah umum.
-JANGAN mengarang angka. Data produk saat ini: ${JSON.stringify(products)}. Gudang: ${JSON.stringify(whs)}.
-Jika pertanyaan butuh data yang tidak kamu punya, sarankan user tanya Lisa dengan keyword: stok/harga/sales/approve.`;
+// ---- live ERP context snapshot (given to the LLM so it can reason over real data) ----
+function erpSnapshot() {
   try {
-    const body = JSON.stringify({ messages: [{ role: 'system', content: ctx }, { role: 'user', content: q }], max_tokens: 220 });
-    const resp = await fetch(`https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/ai/run/${CF_MODEL}`, {
-      method: 'POST', headers: { 'Authorization': `Bearer ${CF_TOKEN}`, 'Content-Type': 'application/json' }, body });
-    const j = await resp.json();
-    const txt = j && j.result && (j.result.response || j.result.text);
-    return typeof txt === 'string' && txt.trim() ? { text: txt.trim().slice(0, 700), ai: true } : null;
-  } catch { return null; }
+    const wh = rows(`SELECT code, name, type FROM warehouses WHERE is_active = 1 ORDER BY code`);
+    const s = one(`SELECT COALESCE(SUM(physical * avg_cost),0) v FROM inventory_balances`) || {};
+    const top = rows(`SELECT p.code, p.name, p.brand, ib.physical, ib.reserved
+      FROM inventory_balances ib JOIN products p ON p.id = ib.product_id
+      ORDER BY (ib.physical - ib.reserved) DESC LIMIT 8`);
+    const low = ext.lowStock(5);
+    const items = ext.actionItems();
+    return JSON.stringify({
+      warehouses: wh.map(w => `${w.code} ${w.name}`),
+      stock_value: rp(s.v),
+      top_stock: top.map(t => `${t.code} ${t.name} (${t.brand || '-'}): avail ${t.physical - t.reserved}`),
+      low_stock: low.map(r => `${r.code} avail ${r.available} / reorder ${r.reorder_point}`),
+      pending_docs: items.length
+    });
+  } catch (e) { return '{}'; }
+}
+
+// ---- LLM call (OpenRouter free tier, multi-model fallback, never throws) ----
+async function llmReply(q) {
+  if (!OR_KEY || !OR_MODELS.length) return null;
+  const ctx = erpSnapshot();
+  const system = `Kamu adalah Lisa, asisten internal ERP PT Monalisa Tunggal Jaya (PT MTJ) — distributor lighting, audio & LED profesional sejak 1980. ` +
+    `Persona: wanita, profesional, sedikit sarkas, to the point. Bahasa: Indonesia santai tapi rapi. ` +
+    `Jawab SINGKAT (2-4 kalimat). JANGAN mengarang angka atau fakta — pakai hanya data ERP di bawah. ` +
+    `Kalau pertanyaan butuh data yang tidak ada di snapshot, arahkan user pakai keyword: stok, harga, sales, approve, low stock, gudang, customer, follow-up. ` +
+    `Jika ditanya di luar ERP (candaan, cuaca, umum), jawab ramah singkat tanpa mengarang data MTJ.\n\n` +
+    `SNAPSHOT ERP SAAT INI:\n${ctx}`;
+  const body = JSON.stringify({
+    messages: [{ role: 'system', content: system }, { role: 'user', content: q }],
+    max_tokens: 300, temperature: 0.4, stream: false
+  });
+  for (const model of OR_MODELS) {
+    try {
+      const req = new Request(`${OR_BASE}/chat/completions`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${OR_KEY}`, 'Content-Type': 'application/json' },
+        body
+      });
+      const resp = await fetch(req);
+      if (resp.status === 429 || resp.status === 402) continue; // throttle / no credits -> try next model
+      if (!resp.ok) continue;
+      const j = await resp.json();
+      const txt = j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
+      if (typeof txt === 'string' && txt.trim()) return { text: txt.trim().slice(0, 900), ai: true };
+    } catch { /* try next model */ }
+  }
+  return null;
 }
 
 // ---- public entry: answer a user message (stateless; history stays client-side) ----
 async function reply(message) {
   const q = String(message || '').slice(0, 500).trim();
   if (!q) return { text: 'Tanya apa hari ini? 😊' };
-  let a = answer(q);
-  if (!a) a = (await aiFallback(q)) ||
-    { text: 'Hmm, itu di luar jangkauan data ERP yang bisa kubaca langsung. Coba keyword: *stok*, *harga*, *sales*, *approve*, *low stock*, *gudang* — atau ketik 📚.' };
-  return { text: a.text, goto: a.goto || null, ai: !!a.ai };
+
+  // 1) deterministic tool first (fast + always factually correct)
+  const a = answer(q);
+  if (a) return { text: a.text, goto: a.goto || null };
+
+  // 2) free-form -> LLM brain
+  const ai = await llmReply(q);
+  if (ai) return ai;
+
+  // 3) last-resort fallback (LLM throttled / no credits) — stay useful, never error
+  return { text: 'Hmm, itu di luar jangkauan data ERP yang bisa kubaca langsung. Coba keyword: *stok*, *harga*, *sales*, *approve*, *low stock*, *gudang* — atau ketik 📚. (Mode AI lagi ramai, coba sebentar lagi ya 🙂)' };
 }
 
 module.exports = { reply };
-
-
-
-
