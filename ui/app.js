@@ -40,6 +40,28 @@ try { if (localStorage.getItem('side_collapsed') === '1') document.addEventListe
 // ---------------- views ----------------
 const views = {};
 
+// ---- SVG area chart for dashboard trend (zero-dep) ----
+function areaChart(trend) {
+  if (!trend || !trend.length) return '<span class="mut">no data</span>';
+  const W = 520, H = 200, pad = 8;
+  const max = Math.max(...trend.map(t => t.sales), 1);
+  const n = trend.length;
+  const x = i => pad + i * (W - pad * 2) / (n - 1);
+  const y = v => H - pad - (v / max) * (H - pad * 2);
+  const curYm = new Date().toISOString().slice(0, 7);
+  const pts = trend.map((t, i) => [x(i), y(t.sales)]);
+  const line = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
+  const area = `M${pts[0][0].toFixed(1)} ${H - pad} ` + pts.map(p => 'L' + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ') + ` L${pts[n - 1][0].toFixed(1)} ${H - pad} Z`;
+  const curIdx = trend.findIndex(t => t.ym === curYm);
+  const dot = curIdx >= 0 ? `<circle class="dot" cx="${pts[curIdx][0].toFixed(1)}" cy="${pts[curIdx][1].toFixed(1)}" r="4"/>` : '';
+  const labels = trend.map((t, i) => (i % 2 === 0 || i === n - 1) ? `<text x="${x(i).toFixed(1)}" y="${H - 1}" font-size="9" fill="var(--mut)" text-anchor="middle">${t.label}</text>` : '').join('');
+  return `<svg class="chart-area" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Sales trend">
+    <defs><linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="rgba(27,54,145,.22)"/><stop offset="100%" stop-color="rgba(27,54,145,0)"/>
+    </linearGradient></defs>
+    <path class="fill" d="${area}"/><path class="line" d="${line}"/>${dot}${labels}</svg>`;
+}
+
 views.dash = async () => {
   const period = window.dashPeriod || 'ytd';
   const d = await api('/dashboard2?period=' + period);
@@ -92,85 +114,99 @@ views.dash = async () => {
   const custs = d.top_customers.map(c => `<div>🏢 <b>${esc(c.name)}</b> · ${c.orders} SO — ${fmt(c.revenue)}</div>`).join('') || '<span class="dim">no posted sales yet</span>';
 
   main.innerHTML = `
-  <div class="dashhead"><h2 style="border:none;margin:0">📊 Management Dashboard</h2>
-    <div class="pbtns">${per}</div></div>
-  <div class="sheetwrap">
-    <div class="sheetname"><span class="on">Dashboard</span><span class="adds" title="read-only view">＋</span></div>
-    <div class="grid-ruler"><b></b><b>A</b><b>B</b><b>C</b><b>D</b><b>E</b><b>F</b></div>
-
-    <div class="srow"><div class="rn">1</div>${gcell(
-      `<div style="display:flex;align-items:center;gap:12px"><img src="/logo.png" style="width:34px" alt="PT MTJ">
-       <div><b style="font-size:14px;color:var(--hi)">MTJ Channel Manager — ${plabel}</b>
-       <div class="mut" style="font-size:11px">PT Monalisa Tunggal Jaya · “Your Potential. Our Passion.” · data langsung dari modul ERP</div></div></div>`, { span: 6 })}</div>
-
-    <div class="srow"><div class="rn">2</div>${sec('Sales')}</div>
-    <div class="srow"><div class="rn">3</div>
-      ${kcell('Sales ' + plabel, fmt(sc.cur ?? d.sales_period.s), { evo: evo(sc.cur || 0, sc.prev || 0) })}
-      ${kcell('Posted Orders', d.sales_period.c, { evo: ordEvo })}
-      ${kcell('Retail', fmt(d.sales_period.retail))}
-      ${kcell('Project', fmt(d.sales_period.project))}
-      ${kcell('PPN', fmt(d.sales_period.ppn))}
-      ${kcell('Outstanding Billing', fmt(s.outstanding_billing), { go: 'projects' })}
+  <div class="dash">
+  <div class="dash-top">
+    <div>
+      <h1>Management Dashboard</h1>
+      <div class="sub" style="margin:0">PT Monalisa Tunggal Jaya · “Your Potential. Our Passion.” · ${plabel}</div>
     </div>
+    <div class="period-pill">${per}</div>
+  </div>
 
-    <div class="srow"><div class="rn">4</div>${sec('Perlu Tindakan — ' + d.action_items.length + ' dokumen')}</div>
-    <div class="srow"><div class="rn">5</div>
-      ${gcell(d.action_items.length
-        ? `<table><tr><th>Doc</th><th>Type</th><th>Date</th><th>Status</th><th class="money">Amount</th><th>Action</th></tr>${acts}</table>`
-        : '<span class="dim">Tidak ada dokumen menunggu — antrian bersih. 🎉</span>', { span: 6, cls: 'dim' })}
+  <!-- KPI cards -->
+  <div class="kpi-grid">
+    <div class="wcard accent">
+      <span class="ic">💰</span>
+      <div class="lbl">Sales ${plabel}</div>
+      <div class="val">${fmt(sc.cur ?? d.sales_period.s)}</div>
+      <div class="evo ${evo(sc.cur || 0, sc.prev || 0).cls}">${evo(sc.cur || 0, sc.prev || 0).txt}</div>
     </div>
+    <div class="wcard"><span class="ic">📄</span><div class="lbl">Posted Orders</div>
+      <div class="val nav" onclick="go('docs')">${d.sales_period.c}</div>
+      <div class="evo ${ordEvo.cls}">${ordEvo.txt}</div></div>
+    <div class="wcard"><span class="ic">🏬</span><div class="lbl">Stock Value</div>
+      <div class="val nav" onclick="go('stock')">${fmt(s.stock_value)}</div>
+      <div class="evo flat">avg cost basis</div></div>
+    ${s.low_stock > 0
+      ? `<div class="wcard warn"><span class="ic">⚠️</span><div class="lbl">Low Stock</div>
+         <div class="val nav" onclick="go('stock')">${s.low_stock}</div>
+         <div class="evo down">▼ below reorder point</div></div>`
+      : `<div class="wcard"><span class="ic">✅</span><div class="lbl">Low Stock</div>
+         <div class="val">0</div><div class="evo up">▲ all above reorder</div></div>`}
+    ${d.action_items.length
+      ? `<div class="wcard warn"><span class="ic">🔔</span><div class="lbl">Needs Action</div>
+         <div class="val nav" onclick="go('docs')">${d.action_items.length}</div>
+         <div class="evo down">▼ docs awaiting you</div></div>`
+      : `<div class="wcard"><span class="ic">🎉</span><div class="lbl">Needs Action</div>
+         <div class="val">0</div><div class="evo up">▲ queue clean</div></div>`}
+    <div class="wcard"><span class="ic">🛡️</span><div class="lbl">Open Service</div>
+      <div class="val nav" onclick="go('warranty')">${s.open_service}</div>
+      <div class="evo flat">${s.active_warranty} active warranty</div></div>
+    <div class="wcard"><span class="ic">🤝</span><div class="lbl">Open Leads</div>
+      <div class="val nav" onclick="go('crm')">${d.crm.open_leads}</div>
+      <div class="evo flat">${fmt(d.crm.open_value)} pipeline</div></div>
+  </div>
 
-    <div class="srow"><div class="rn">6</div>${sec('Stock &amp; Purchasing')}</div>
-    <div class="srow"><div class="rn">7</div>
-      ${kcell('Stock Value (avg cost)', fmt(s.stock_value), { go: 'stock' })}
-      ${kcell('Available Stock', s.available_stock, { go: 'stock' })}
-      ${kcell('Low Stock Items', s.low_stock, { go: 'stock', evo: s.low_stock > 0 ? { cls: 'down', txt: '▲ below reorder point — check watchlist' } : { cls: 'flat', txt: 'all above reorder point' } })}
-      ${kcell('Reserved', s.reserved_stock, { go: 'stock' })}
-      ${kcell('Purchase Value', fmt(s.purchase_value), { go: 'docs' })}
-      ${kcell('Local / Import', fmt(s.local_purchase) + ' / ' + fmt(s.import_purchase), { go: 'docs' })}
+  <!-- Trend + Action items -->
+  <div class="grid-2">
+    <div class="panel">
+      <div class="panel-h"><h3>📈 12-Month Sales Trend</h3>
+        <span class="tag">${plabel}</span></div>
+      <div class="panel-b">
+        ${areaChart(d.trend)}
+        <div class="chart-legend"><span><i style="background:var(--hi)"></i>Monthly sales</span>
+          <span><i style="background:var(--accent)"></i>Current month</span></div>
+      </div>
     </div>
+    <div class="panel">
+      <div class="panel-h"><h3>🔔 Action Items</h3>
+        <span class="tag">${d.action_items.length}</span></div>
+      <div class="panel-b">
+        ${d.action_items.length
+          ? `<table class="act-table" style="width:100%;border-collapse:collapse"><tr><th>Doc</th><th>Status</th><th class="money">Amount</th></tr>${acts}</table>`
+          : `<div class="pill-ok">✓ No documents waiting — queue is clean</div>`}
+      </div>
+    </div>
+  </div>
 
-    <div class="srow"><div class="rn">8</div>${sec('Warehouse Summary')}</div>
-    <div class="srow"><div class="rn">9</div>
-      ${gcell(`<div style="font-size:12px;line-height:1.8">${(d.warehouse_summary || []).map(wh =>
-        `<div><b>${esc(wh.name)}</b> — ${wh.item_count || 0} items · ${fmt(wh.total_value || 0)}${wh.low_stock_count > 0 ? ` · <span style="color:#8a1c1c">${wh.low_stock_count} low stock</span>` : ''}</div>`
-      ).join('') || '<span class="dim">no warehouse data</span>'}</div>`, { span: 6 })}
-    </div>
+  <!-- Top products + Top customers -->
+  <div class="grid-2b">
+    <div class="panel"><div class="panel-h"><h3>📦 Top Products</h3></div>
+      <div class="panel-b"><div class="mini-list">${d.top_products.length
+        ? d.top_products.map(p => `<div class="row"><span>📦 <b>${esc(p.code)}</b> · ${p.qty} pcs</span><span class="muted">${fmt(p.revenue)}</span></div>`).join('')
+        : '<span class="muted">no posted sales yet</span>'}</div></div></div>
+    <div class="panel"><div class="panel-h"><h3>🏢 Top Customers</h3></div>
+      <div class="panel-b"><div class="mini-list">${d.top_customers.length
+        ? d.top_customers.map(c => `<div class="row"><span>🏢 <b>${esc(c.name)}</b> · ${c.orders} SO</span><span class="muted">${fmt(c.revenue)}</span></div>`).join('')
+        : '<span class="muted">no posted sales yet</span>'}</div></div></div>
+  </div>
 
-    <div class="srow"><div class="rn">10</div>${sec('Analisis')}</div>
-    <div class="srow"><div class="rn">11</div>
-      ${gcell(`<div class="klbl" style="color:var(--mut);font-size:10.5px;text-transform:uppercase;letter-spacing:.07em">12-Month Sales Trend</div><div class="minibars">${bars}</div>`, { span: 4 })}
-      ${gcell(`<div class="klbl" style="color:var(--mut);font-size:10.5px;text-transform:uppercase;letter-spacing:.07em">Top Products</div><div style="font-size:11.5px;line-height:1.9">${tops}</div>`, { span: 2 })}
-    </div>
-    <div class="srow"><div class="rn">12</div>
-      ${gcell(`<div class="klbl" style="color:var(--mut);font-size:10.5px;text-transform:uppercase;letter-spacing:.07em">Top Customers</div><div style="font-size:11.5px;line-height:1.9">${custs}</div>`, { span: 2 })}
-      ${gcell(`<div class="klbl" style="color:var(--mut);font-size:10.5px;text-transform:uppercase;letter-spacing:.07em">Recent Activity</div><div class="feedbox" style="border:none;padding:2px 0;max-height:150px">${feed || '<span class="dim">no activity yet</span>'}</div>`, { span: 4 })}
-    </div>
-    ${d.low_stock.length ? `<div class="srow"><div class="rn">13</div>${gcell(
-      `<table><tr><th>Code</th><th>Product</th><th>Warehouse</th><th class="money">Available</th><th class="money">Reorder Pt</th></tr>
-      ${d.low_stock.map(r => `<tr><td><a href="#" onclick="go('item-${r.id}');return false" style="color:inherit"><b>${esc(r.code)}</b></a></td>
-        <td>${esc(r.name)} <span class="mut">${esc(r.brand || '')}</span></td><td>${esc(r.wh_name)}</td>
-        <td class="money"><b class="low">${r.available}</b></td><td class="money">${r.reorder_point}</td></tr>`).join('')}</table>`, { span: 6 })}</div>` : ''}
+  <!-- Warehouses + Low stock watchlist -->
+  <div class="section-label">Stock &amp; Warehouse</div>
+  <div class="grid-2b">
+    <div class="panel"><div class="panel-h"><h3>🏬 Warehouse Summary</h3><span class="tag">${(d.warehouse_summary||[]).length}</span></div>
+      <div class="panel-b"><div class="mini-list">${(d.warehouse_summary||[]).map(wh =>
+        `<div class="row"><span><b>${esc(wh.name)}</b> · ${wh.item_count||0} items${wh.low_stock_count>0?` <span style="color:var(--neg)">· ${wh.low_stock_count} low</span>`:''}</span><span class="muted">${fmt(wh.total_value||0)}</span></div>`).join('') || '<span class="muted">no warehouse data</span>'}</div></div></div>
+    <div class="panel"><div class="panel-h"><h3>⚠️ Low-Stock Watchlist</h3>${d.low_stock.length?`<span class="tag">${d.low_stock.length}</span>`:''}</div>
+      <div class="panel-b">${d.low_stock.length
+        ? `<table class="act-table" style="width:100%;border-collapse:collapse"><tr><th>Code</th><th>WH</th><th class="money">Avail</th><th class="money">Reorder</th></tr>${d.low_stock.map(r =>
+            `<tr><td><a href="#" onclick="go('item-${r.id}');return false" style="color:inherit"><b>${esc(r.code)}</b></a></td><td>${esc(r.wh_name)}</td><td class="money"><b style="color:var(--neg)">${r.available}</b></td><td class="money">${r.reorder_point}</td></tr>`).join('')}</table>`
+        : `<div class="pill-ok">✓ All items above reorder point</div>`}</div></div>
+  </div>
 
-    <div class="srow"><div class="rn">14</div>${sec('Service · Warranty · Field')}</div>
-    <div class="srow"><div class="rn">15</div>
-      ${kcell('Open Service', s.open_service, { go: 'warranty' })}
-      ${kcell('Completed Service', s.completed_service, { go: 'warranty' })}
-      ${kcell('Active Warranty', s.active_warranty, { go: 'warranty' })}
-      ${kcell('Warranty Claims', s.warranty_claims, { go: 'warranty' })}
-      ${kcell('Open Work Orders', s.open_work_orders, { go: 'warranty' })}
-      ${kcell('Active Projects', s.active_projects, { go: 'projects' })}
-    </div>
-
-    <div class="srow"><div class="rn">16</div>${sec('CRM Pipeline')}</div>
-    <div class="srow"><div class="rn">17</div>
-      ${kcell('Open Leads', d.crm.open_leads, { go: 'crm', sub: 'Pipeline value ' + fmt(d.crm.open_value) })}
-      ${kcell('Won', d.crm.won, { go: 'crm' })}
-      ${kcell('Lost', d.crm.lost, { go: 'crm' })}
-      ${kcell('Follow-ups ≤7d', d.crm.followups_due, { go: 'crm', evo: d.crm.followups_due > 0 ? { cls: 'down', txt: '▲ due this week' } : { cls: 'flat', txt: 'none due' } })}
-      ${gcell('<span class="dim"></span>')}
-      ${gcell('<span class="dim"></span>')}
-    </div>
+  <!-- Recent activity -->
+  <div class="section-label">Recent Activity</div>
+  <div class="panel"><div class="panel-b">${feed || '<span class="muted">no activity yet</span>'}</div></div>
   </div>`;
 };
 
