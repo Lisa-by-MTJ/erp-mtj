@@ -547,7 +547,7 @@ route('POST', '/api/delivery-orders', async (c) => {
       ? (one(`SELECT customer_id FROM sales_orders WHERE id=?`, b.sales_order_id) || {}).customer_id || null : null;
     const info = run(`INSERT INTO delivery_orders(doc_no,surat_jalan_no,status,do_date,sales_order_id,customer_id,project_id,purpose,warehouse_id,vehicle_info,driver_name,recipient_name)
       VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
-      no, sj, 'DRAFT', b.do_date || null, b.sales_order_id || null, b.customer_id || soCust, b.project_id || null,
+      no, sj, 'DRAFT', b.do_date || new Date().toISOString().slice(0, 10), b.sales_order_id || null, b.customer_id || soCust, b.project_id || null,
       b.purpose || 'SALES', b.warehouse_id, b.vehicle_info || null, b.driver_name || null, b.recipient_name || null);
     const id = Number(info.lastInsertRowid);
     for (const l of (b.lines || [])) {
