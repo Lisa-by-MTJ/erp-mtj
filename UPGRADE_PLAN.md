@@ -73,5 +73,19 @@ CREATE TABLE IF NOT EXISTS stock_count_lines (
 );
 ```
 
-## New Files
-- `scripts/drive-sync/sync_stock.js` — Google Drive stock file sync script
+## Status (2026-09-03, deployed)
+All 13 features LIVE at erp.ptmtj.com. Container rebuilt (mtj-erp:latest), service restarted.
+
+### Inventory Reconciliation from Google Drive — DONE (logic verified)
+- `scripts/drive-sync/reconcile_drive_stock.py` — reads both XLSX (cached formula values),
+  reconciles into inventory_balances: Alvinity→WH-JKT, Monalisa→WH-JKT (FINAL STOCK JAKARTA)
+  + WH-BALI (Outgoing To MTJ Bali col). Idempotent, writes stock_movements (DRIVE_SYNC).
+- `scripts/drive-sync/drive_download.py` — REST downloader (no SDK), refreshes OAuth token.
+- Live run result: 3021 products, WH-JKT 2928 items (Rp 5.77B), WH-BALI 8 items.
+- **BLOCKER**: Google OAuth refresh_token in ~/.hermes/google_token.json is expired/revoked
+  (invalid_grant). Live auto-download needs Tio to re-authorize. Until then, workflow is:
+  Tio replaces XLSX in /home/mtj/tmp_stock/ → run `reconcile_drive_stock.py`.
+
+### API endpoints verified live
+stock/export, stock/aging, stock-counts (+lines/post), search, warehouse-summary,
+reports/stock|sales|invoices, sync/drive, docs/:table/:id/template — all return 200.
