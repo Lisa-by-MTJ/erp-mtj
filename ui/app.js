@@ -68,7 +68,7 @@ views.dash = async () => {
   const s = d.snapshot;
   window.dashPeriod = period;
   const zero = v => Number(v || 0) === 0 ? ' mut0' : '';
-  const plabel = { month: 'This Month', quarter: 'This Quarter', ytd: 'Year to Date', '30d': 'Last 30 Days' }[period];
+  const plabel = { month: 'This Month', quarter: 'This Quarter', ytd: 'Year to Date' }[period] || 'Year to Date';
 
   // ---- helpers: spreadsheet cells ----
   const kcell = (label, val, o = {}) => `<div class="kpicell"><div class="klbl">${label}</div>
@@ -100,8 +100,8 @@ views.dash = async () => {
     <div><b>${esc(a.username || 'system')}</b> <span class="mut">${esc(a.action.toLowerCase())}</span>
     ${a.doc_no ? `<b>${esc(a.doc_no)}</b>` : esc(a.module)} ${a.new_value ? `<span class="mut">→ ${esc(String(a.new_value).slice(0, 40))}</span>` : ''}
     <div class="mut ftime">${esc(a.at)}</div></div></div>`).join('');
-  const per = ['month', 'quarter', 'ytd', '30d'].map(p =>
-    `<button class="btn sm ${p === period ? '' : 'gray'}" onclick="window.dashPeriod='${p}';views.dash()">${{ month: 'Month', quarter: 'Quarter', ytd: 'YTD', '30d': '30d' }[p]}</button>`).join('');
+  const per = ['month', 'quarter', 'ytd'].map(p =>
+    `<button class="btn sm ${p === period ? '' : 'gray'}" onclick="window.dashPeriod='${p}';views.dash()">${{ month: 'Month', quarter: 'Quarter', ytd: 'YTD' }[p]}</button>`).join('');
 
   // ---- 12-month mini chart ----
   const max = Math.max(...d.trend.map(x => x.sales), 1);
