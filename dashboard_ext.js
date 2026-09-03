@@ -71,7 +71,7 @@ function topProducts(period) {
   // Use delivery_order_lines (authoritative shipped data) rather than sales_order_lines
   // which may be empty for historically-imported SOs.
   return rows(`SELECT p.id, p.code, p.name, SUM(dol.qty) qty,
-      ROUND(SUM(dol.qty * COALESCE(p.avg_cost, 0)), 0) AS revenue
+      ROUND(SUM(dol.qty * COALESCE(p.cost_price, 0)), 0) AS revenue
     FROM delivery_order_lines dol
     JOIN delivery_orders do ON do.id = dol.delivery_order_id
     JOIN sales_orders o ON o.id = do.sales_order_id
