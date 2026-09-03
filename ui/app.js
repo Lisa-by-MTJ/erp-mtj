@@ -162,8 +162,8 @@ views.dash = async () => {
       ${kcell('Active Projects', s.active_projects, { go: 'projects' })}
     </div>
 
-    <div class="srow"><div class="rn">14</div>${sec('CRM Pipeline')}</div>
-    <div class="srow"><div class="rn">15</div>
+    <div class="srow"><div class="rn">16</div>${sec('CRM Pipeline')}</div>
+    <div class="srow"><div class="rn">17</div>
       ${kcell('Open Leads', d.crm.open_leads, { go: 'crm', sub: 'Pipeline value ' + fmt(d.crm.open_value) })}
       ${kcell('Won', d.crm.won, { go: 'crm' })}
       ${kcell('Lost', d.crm.lost, { go: 'crm' })}
