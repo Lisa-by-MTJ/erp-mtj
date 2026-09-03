@@ -196,11 +196,12 @@ async function llmReply(q) {
     `Kalau pertanyaan butuh data yang tidak ada di snapshot, arahkan user pakai keyword: stok, harga, sales, approve, low stock, gudang, customer, follow-up. ` +
     `Jika ditanya di luar ERP (candaan, cuaca, umum), jawab ramah singkat tanpa mengarang data MTJ.\n\n` +
     `SNAPSHOT ERP SAAT INI:\n${ctx}`;
-  const body = JSON.stringify({
-    messages: [{ role: 'system', content: system }, { role: 'user', content: q }],
-    max_tokens: 300, temperature: 0.4, stream: false
-  });
   for (const model of OR_MODELS) {
+    const body = JSON.stringify({
+      model,
+      messages: [{ role: 'system', content: system }, { role: 'user', content: q }],
+      max_tokens: 300, temperature: 0.4, stream: false
+    });
     try {
       const req = new Request(`${OR_BASE}/chat/completions`, {
         method: 'POST',
