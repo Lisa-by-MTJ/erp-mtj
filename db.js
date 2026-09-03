@@ -249,6 +249,26 @@ CREATE TABLE IF NOT EXISTS doc_attachments (
   mime TEXT NOT NULL DEFAULT 'application/pdf', uploaded_by INTEGER REFERENCES users(id),
   created_at TEXT DEFAULT (datetime('now')),
   UNIQUE(table_name, doc_id, stored_path));
+CREATE TABLE IF NOT EXISTS stock_counts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  count_no TEXT UNIQUE NOT NULL,
+  warehouse_id INTEGER NOT NULL REFERENCES warehouses(id),
+  status TEXT NOT NULL DEFAULT 'OPEN' CHECK(status IN ('OPEN','COUNTED','POSTED')),
+  counted_by INTEGER,
+  posted_by INTEGER,
+  note TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  posted_at TEXT
+);
+CREATE TABLE IF NOT EXISTS stock_count_lines (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  stock_count_id INTEGER NOT NULL REFERENCES stock_counts(id) ON DELETE CASCADE,
+  product_id INTEGER NOT NULL REFERENCES products(id),
+  system_qty REAL NOT NULL DEFAULT 0,
+  counted_qty REAL,
+  variance REAL,
+  note TEXT
+);
 `);
 
 const PPN_RATE = 0.11; // §9

@@ -133,5 +133,48 @@ function billingAging() {
   res.buckets = buckets.map(x => ({ k: x.k, label: x.label, amount: res.buckets[x.k] || 0 }));
   return res;
 }
-module.exports = { actionItems, activity, lowStock, trend, topProducts, topCustomers, salesByPeriod, salesComparison, billingAging, periodStart };
+// ---- Stock aging: days since last movement per product+warehouse ----
+function stockAging() {
+  return rows(`
+    SELECT p.id, p.code, p.name, p.brand, w.name wh_name,
+           ib.physical, ib.avg_cost, (ib.physical * ib.avg_cost) stock_value,
+           last.last_movement,
+           CAST(julianday('now') - julianday(last.last_movement) AS INTEGER) AS days_idle,
+           CASE
+             WHEN julianday('now') - julianday(last.last_movement) <= 30 THEN '0-30d'
+             WHEN julianday('now') - julianday(last.last_movement) <= 90 THEN '31-90d'
+             WHEN julianday('now') - julianday(last.last_movement) <= 180 THEN '91-180d'
+             ELSE '180d+'
+           END AS aging_bucket
+    FROM inventory_balances ib
+    JOIN products p ON p.id = ib.product_id
+    JOIN warehouses w ON w.id = ib.warehouse_id
+    LEFT JOIN (
+      SELECT product_id, warehouse_id, MAX(moved_at) AS last_movement
+      FROM stock_movements
+      GROUP BY product_id, warehouse_id
+    ) last ON last.product_id = ib.product_id AND last.warehouse_id = ib.warehouse_id
+    WHERE ib.physical > 0
+    ORDER BY days_idle DESC
+  `);
+}
+
+// ---- Per-warehouse summary ----
+function warehouseSummary() {
+  return rows(`
+    SELECT w.id AS wh_id, w.code AS wh_code, w.name AS wh_name,
+           COALESCE(SUM(ib.physical * ib.avg_cost), 0) AS total_value,
+           COUNT(CASE WHEN ib.physical > 0 THEN 1 END) AS total_items,
+           COUNT(CASE WHEN ib.physical <= p.reorder_point AND p.reorder_point > 0 THEN 1 END) AS low_stock_count,
+           COALESCE(SUM(ib.reserved), 0) AS reserved_count
+    FROM warehouses w
+    LEFT JOIN inventory_balances ib ON ib.warehouse_id = w.id
+    LEFT JOIN products p ON p.id = ib.product_id
+    WHERE w.is_active = 1
+    GROUP BY w.id, w.code, w.name
+    ORDER BY w.code
+  `);
+}
+
+module.exports = { actionItems, activity, lowStock, trend, topProducts, topCustomers, salesByPeriod, salesComparison, billingAging, periodStart, stockAging, warehouseSummary };
 
