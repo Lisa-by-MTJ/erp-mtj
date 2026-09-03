@@ -30,7 +30,7 @@ function activity(limit) {
     ORDER BY a.id DESC LIMIT ?`, limit || 10);
 }
 function activityCount() {
-  return one(`SELECT COUNT(*) c FROM audit_trail`).c;
+  return rows(`SELECT COUNT(*) c FROM audit_trail`)[0].c;
 }
 
 // ---- P1: low stock watchlist ----
