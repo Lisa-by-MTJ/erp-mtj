@@ -196,7 +196,7 @@ views.dash = async () => {
   <div class="grid-2b">
     <div class="panel"><div class="panel-h"><h3>🏬 Warehouse Summary</h3><span class="tag">${(d.warehouse_summary||[]).length}</span></div>
       <div class="panel-b"><div class="mini-list">${(d.warehouse_summary||[]).map(wh =>
-        `<div class="row"><span><b>${esc(wh.name)}</b> · ${wh.item_count||0} items${wh.low_stock_count>0?` <span style="color:var(--neg)">· ${wh.low_stock_count} low</span>`:''}</span><span class="muted">${fmt(wh.total_value||0)}</span></div>`).join('') || '<span class="muted">no warehouse data</span>'}</div></div></div>
+        `<div class="row"><span><b>${esc(wh.wh_name)}</b> · ${wh.total_items||0} items${wh.low_stock_count>0?` <span style="color:var(--neg)">· ${wh.low_stock_count} low</span>`:''}</span><span class="muted">${fmt(wh.total_value||0)}</span></div>`).join('') || '<span class="muted">no warehouse data</span>'}</div></div></div>
     <div class="panel"><div class="panel-h"><h3>⚠️ Low-Stock Watchlist</h3>${d.low_stock.length?`<span class="tag">${d.low_stock.length}</span>`:''}</div>
       <div class="panel-b">${d.low_stock.length
         ? `<table class="act-table" style="width:100%;border-collapse:collapse"><tr><th>Code</th><th>WH</th><th class="money">Avail</th><th class="money">Reorder</th></tr>${d.low_stock.map(r =>
