@@ -64,11 +64,12 @@ function areaChart(trend) {
 
 views.dash = async () => {
   const period = window.dashPeriod || 'ytd';
+  _activityOffset = 10; // reset for "Load More"
   const d = await api('/dashboard2?period=' + period);
   const s = d.snapshot;
   window.dashPeriod = period;
   const zero = v => Number(v || 0) === 0 ? ' mut0' : '';
-  const plabel = { month: 'This Month', quarter: 'This Quarter', ytd: 'Year to Date' }[period] || 'Year to Date';
+  const plabel = { month: 'This Month', quarter: 'This Quarter', ytd: 'Year to Date', alltime: 'All Time' }[period] || 'Year to Date';
 
   // ---- helpers: spreadsheet cells ----
   const kcell = (label, val, o = {}) => `<div class="kpicell"><div class="klbl">${label}</div>
@@ -100,8 +101,8 @@ views.dash = async () => {
     <div><b>${esc(a.username || 'system')}</b> <span class="mut">${esc(a.action.toLowerCase())}</span>
     ${a.doc_no ? `<b>${esc(a.doc_no)}</b>` : esc(a.module)} ${a.new_value ? `<span class="mut">→ ${esc(String(a.new_value).slice(0, 40))}</span>` : ''}
     <div class="mut ftime">${esc(a.at)}</div></div></div>`).join('');
-  const per = ['month', 'quarter', 'ytd'].map(p =>
-    `<button class="btn sm ${p === period ? '' : 'gray'}" onclick="window.dashPeriod='${p}';views.dash()">${{ month: 'Month', quarter: 'Quarter', ytd: 'YTD' }[p]}</button>`).join('');
+  const per = ['month', 'quarter', 'ytd', 'alltime'].map(p =>
+    `<button class="btn sm ${p === period ? '' : 'gray'}" onclick="window.dashPeriod='${p}';views.dash()">${{ month: 'Month', quarter: 'Quarter', ytd: 'YTD', alltime: 'All Time' }[p]}</button>`).join('');
 
   // ---- 12-month mini chart ----
   const max = Math.max(...d.trend.map(x => x.sales), 1);
@@ -206,8 +207,44 @@ views.dash = async () => {
 
   <!-- Recent activity -->
   <div class="section-label">Recent Activity</div>
-  <div class="panel"><div class="panel-b">${feed || '<span class="muted">no activity yet</span>'}</div></div>
+  <div class="panel"><div class="panel-b" id="activity-feed">${feed || '<span class="muted">no activity yet</span>'}</div>
+    <div class="panel-f" id="activity-more" style="text-align:center;padding:8px">
+      <button class="btn sm gray" onclick="loadMoreActivity()">Load More</button>
+    </div>
+  </div>
   </div>`;
+};
+
+// ---- Load More Activity (dashboard) ----
+let _activityOffset = 10;
+window.loadMoreActivity = async () => {
+  const feed = document.getElementById('activity-feed');
+  const btn = document.querySelector('#activity-more button');
+  if (!feed || !btn) return;
+  btn.textContent = 'Loading…';
+  btn.disabled = true;
+  try {
+    const r = await api(`/activity?offset=${_activityOffset}&limit=10`);
+    if (r.items && r.items.length) {
+      const html = r.items.map(a => `<div class="frow"><span class="fdot"></span>
+        <div><b>${esc(a.username || 'system')}</b> <span class="mut">${esc(a.action.toLowerCase())}</span>
+        ${a.doc_no ? `<b>${esc(a.doc_no)}</b>` : esc(a.module)} ${a.new_value ? `<span class="mut">→ ${esc(String(a.new_value).slice(0, 40))}</span>` : ''}
+        <div class="mut ftime">${esc(a.at)}</div></div></div>`).join('');
+      feed.insertAdjacentHTML('beforeend', html);
+      _activityOffset += r.items.length;
+    }
+    if (!r.has_more) {
+      btn.textContent = 'All loaded';
+      btn.disabled = true;
+      btn.style.opacity = '0.5';
+    } else {
+      btn.textContent = 'Load More';
+      btn.disabled = false;
+    }
+  } catch (e) {
+    btn.textContent = 'Load More';
+    btn.disabled = false;
+  }
 };
 
 views.stock = async () => {

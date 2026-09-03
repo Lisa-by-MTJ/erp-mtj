@@ -29,6 +29,9 @@ function activity(limit) {
     FROM audit_trail a LEFT JOIN users u ON u.id = a.user_id
     ORDER BY a.id DESC LIMIT ?`, limit || 10);
 }
+function activityCount() {
+  return one(`SELECT COUNT(*) c FROM audit_trail`).c;
+}
 
 // ---- P1: low stock watchlist ----
 function lowStock(limit) {
@@ -65,6 +68,7 @@ function periodStart(period) {
   if (period === 'quarter') { const q = Math.floor(now.getMonth() / 3) * 3;
     return now.getFullYear() + '-' + String(q + 1).padStart(2, '0') + '-01'; }
   if (period === '30d') return new Date(now.getTime() - 30 * 864e5).toISOString().slice(0, 10);
+  if (period === 'alltime') return '2000-01-01';
   return now.getFullYear() + '-01-01'; // ytd (default)
 }
 function topProducts(period) {
@@ -181,5 +185,5 @@ function warehouseSummary() {
   `);
 }
 
-module.exports = { actionItems, activity, lowStock, trend, topProducts, topCustomers, salesByPeriod, salesComparison, billingAging, periodStart, stockAging, warehouseSummary };
+module.exports = { actionItems, activity, activityCount, lowStock, trend, topProducts, topCustomers, salesByPeriod, salesComparison, billingAging, periodStart, stockAging, warehouseSummary };
 

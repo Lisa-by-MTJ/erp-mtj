@@ -702,7 +702,7 @@ route('GET', '/api/dashboard', (c) => ok(c.res, dash.snapshot()));
 const ext = require('./dashboard_ext.js');
 let DASH2_CACHE = { at: 0, data: null, period: null };
 route('GET', '/api/dashboard2', (c) => {
-  const period = ['month', 'quarter', 'ytd', '30d'].includes(c.url.searchParams.get('period'))
+  const period = ['month', 'quarter', 'ytd', '30d', 'alltime'].includes(c.url.searchParams.get('period'))
     ? c.url.searchParams.get('period') : 'ytd';
   const nowMs = Date.now();
   if (DASH2_CACHE.data && DASH2_CACHE.period === period && nowMs - DASH2_CACHE.at < 30000)
@@ -724,6 +724,15 @@ route('GET', '/api/dashboard2', (c) => {
   };
   DASH2_CACHE = { at: nowMs, data, period };
   return ok(c.res, data);
+});
+
+// ---- Paginated activity feed (for "Load More" on dashboard) ----
+route('GET', '/api/activity', (c) => {
+  const offset = Math.max(0, parseInt(c.url.searchParams.get('offset')) || 0);
+  const limit = Math.min(50, Math.max(1, parseInt(c.url.searchParams.get('limit')) || 10));
+  const items = ext.activity(offset + limit).slice(offset);
+  const total = ext.activityCount ? ext.activityCount() : items.length + offset;
+  return ok(c.res, { items, offset, limit, has_more: items.length === limit });
 });
 
 // ---- Lisa in-ERP assistant (auth-gated; stateless; 30 req/min per user) ----
