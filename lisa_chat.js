@@ -75,6 +75,7 @@ const isExplanatory = (m) => {
   const words = m.split(/\s+/).filter(Boolean);
   return words.length >= 7; // long natural-language phrasing -> LLM
 };
+const has = (q, ...words) => words.some(w => q.includes(w));
 function route(q) {
   const m = q.toLowerCase();
   if (isExplanatory(m)) return { kind: 'unknown' }; // let the LLM handle it
