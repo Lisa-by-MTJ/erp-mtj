@@ -791,29 +791,6 @@ function csvEscape(val) {
   return s;
 }
 
-// GET /api/stock/export — CSV export of stock data
-route('GET', '/api/stock/export', (c) => {
-  const headers = ['Code','Name','Brand','EAN','Warehouse','Physical','Reserved','Available','AvgCost','Value','ReorderPoint'];
-  const rs = rows(`
-    SELECT p.code, p.name, p.brand, p.barcode, w.name wh_name,
-           ib.physical, ib.reserved, (ib.physical - ib.reserved) available, ib.avg_cost,
-           (ib.physical * ib.avg_cost) stock_value, p.reorder_point
-    FROM inventory_balances ib JOIN products p ON p.id = ib.product_id JOIN warehouses w ON w.id = ib.warehouse_id
-    ORDER BY p.code`);
-  let csv = headers.join(',') + '\n';
-  for (const r of rs) {
-    csv += [r.code, r.name, r.brand, r.barcode, r.wh_name, r.physical, r.reserved, r.available, r.avg_cost, r.stock_value, r.reorder_point].map(csvEscape).join(',') + '\n';
-  }
-  c.res.writeHead(200, {
-    'Content-Type': 'text/csv',
-    'Content-Disposition': 'attachment; filename="stock_export.csv"'
-  });
-  c.res.end(csv);
-});
-
-// GET /api/stock/aging — stock aging report
-route('GET', '/api/stock/aging', (c) => ok(c.res, ext.stockAging()));
-
 // GET /api/stock-counts — list all count sessions
 route('GET', '/api/stock-counts', (c) => ok(c.res, rows(
   "SELECT sc.*, w.name warehouse_name FROM stock_counts sc JOIN warehouses w ON w.id = sc.warehouse_id ORDER BY sc.id DESC")));
