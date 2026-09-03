@@ -738,11 +738,11 @@ views.item = async id => {
     </div>
   </div>
   <h2>Stok per Gudang</h2>
-  <table><tr><th>Warehouse</th><th class="money">Physical</th><th class="money">Reserved</th>
+  <table><tr><th>Warehouse</th><th>Location</th><th class="money">Physical</th><th class="money">Reserved</th>
   <th class="money">Available</th><th class="money">Avg Cost</th><th class="money">Value</th></tr>
-  ${d.by_warehouse.map(r => `<tr><td>${esc(r.wh_name)}</td><td class="money">${r.physical}</td><td class="money">${r.reserved}</td>
+  ${d.by_warehouse.map(r => { const loc = [r.zone, r.rack, r.shelf, r.bin].filter(Boolean).join(' / '); return `<tr><td>${esc(r.wh_name)}</td><td class="mut">${loc ? esc(loc) : '—'}</td><td class="money">${r.physical}</td><td class="money">${r.reserved}</td>
     <td class="money"><b class="${r.available<=0?'low':'ok'}">${r.available}</b></td>
-    <td class="money">${fmt(r.avg_cost)}</td><td class="money">${fmt(r.stock_value)}</td></tr>`).join('') || '<tr><td colspan=6 class=mut>belum ada stok</td></tr>'}</table>
+    <td class="money">${fmt(r.avg_cost)}</td><td class="money">${fmt(r.stock_value)}</td></tr>`; }).join('') || '<tr><td colspan=7 class=mut>belum ada stok</td></tr>'}</table>
   <h2>Serial Numbers</h2>
   <table><tr><th>Serial</th><th>Status</th><th>Warehouse</th><th>Warranty End</th></tr>
   ${d.serials.slice(0,30).map(s => `<tr><td><b>${esc(s.serial)}</b></td><td>${badge(s.status)}</td><td>${esc(s.wh_name||'—')}</td>
