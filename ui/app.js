@@ -184,11 +184,11 @@ views.dash = async () => {
   <div class="grid-2b">
     <div class="panel"><div class="panel-h"><h3>📦 Top Products</h3></div>
       <div class="panel-b"><div class="mini-list">${d.top_products.length
-        ? d.top_products.map(p => `<div class="row"><span>📦 <b>${esc(p.code)}</b> · ${p.qty} pcs</span><span class="muted">${fmt(p.revenue)}</span></div>`).join('')
+        ? d.top_products.map(p => `<div class="row clickable" onclick="go('item-${p.id}')"><span>📦 <b>${esc(p.code)}</b> · ${p.name || ''} · ${p.qty} pcs</span><span class="muted">${fmt(p.revenue)}</span></div>`).join('')
         : '<span class="muted">no posted sales yet</span>'}</div></div></div>
     <div class="panel"><div class="panel-h"><h3>🏢 Top Customers</h3></div>
       <div class="panel-b"><div class="mini-list">${d.top_customers.length
-        ? d.top_customers.map(c => `<div class="row"><span>🏢 <b>${esc(c.name)}</b> · ${c.orders} SO</span><span class="muted">${fmt(c.revenue)}</span></div>`).join('')
+        ? d.top_customers.map(c => `<div class="row clickable" onclick="go('crm-${c.id}')"><span>🏢 <b>${esc(c.name)}</b> · ${c.orders} SO</span><span class="muted">${fmt(c.revenue)}</span></div>`).join('')
         : '<span class="muted">no posted sales yet</span>'}</div></div></div>
   </div>
 
