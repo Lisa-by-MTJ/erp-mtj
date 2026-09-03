@@ -89,3 +89,14 @@ All 13 features LIVE at erp.ptmtj.com. Container rebuilt (mtj-erp:latest), servi
 ### API endpoints verified live
 stock/export, stock/aging, stock-counts (+lines/post), search, warehouse-summary,
 reports/stock|sales|invoices, sync/drive, docs/:table/:id/template — all return 200.
+
+## Dashboard v4 — Modern Widget Redesign (2026-09-03, LIVE)
+Direction A (kill spreadsheet grid), MTJ navy #1b3691 base + single orange #ff8a2a accent.
+- Replaced Odoo-spreadsheet `views.dash` with widget layout: KPI card grid (solid-color
+  values, no gradient-text), real SVG area chart (areaChart() zero-dep), sectioned panels
+  (Trend+Action, Top Products+Top Customers, Warehouse+Low-Stock, Recent Activity).
+- Added `warehouse_summary` to /api/dashboard2 payload (was missing → empty panel).
+- New CSS in index.html: .wcard, .panel, .kpi-grid, .grid-2/2b, .section-label, .chart-area,
+  dark-mode overrides. Accent vars --accent/--accent-soft/--pos/--neg.
+- Container rebuilt (mtj-erp:latest), restarted. Verified: app.js has kpi-grid, API returns
+  all fields frontend reads. Browser visual check pending (Camoufox not running on host).
