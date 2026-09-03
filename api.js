@@ -196,6 +196,28 @@ function nextCodeVal(kind) {
 route('GET', '/api/warehouses', (c) => ok(c.res, rows(`SELECT * FROM warehouses WHERE is_active=1`)));
 
 // ================= STOCK / INVENTORY (§18-§21) =================
+// GET /api/stock/export — CSV export of stock data (must be before :productId)
+route('GET', '/api/stock/export', (c) => {
+  const headers = ['Code','Name','Brand','EAN','Warehouse','Physical','Reserved','Available','AvgCost','Value','ReorderPoint'];
+  const rs = rows(`
+    SELECT p.code, p.name, p.brand, p.barcode, w.name wh_name,
+           ib.physical, ib.reserved, (ib.physical - ib.reserved) available, ib.avg_cost,
+           (ib.physical * ib.avg_cost) stock_value, p.reorder_point
+    FROM inventory_balances ib JOIN products p ON p.id=ib.product_id JOIN warehouses w ON w.id=ib.warehouse_id
+    ORDER BY p.code`);
+  let csv = headers.join(',') + '\n';
+  for (const r of rs) {
+    csv += [r.code, r.name, r.brand, r.barcode, r.wh_name, r.physical, r.reserved, r.available, r.avg_cost, r.stock_value, r.reorder_point].map(csvEscape).join(',') + '\n';
+  }
+  c.res.writeHead(200, {
+    'Content-Type': 'text/csv',
+    'Content-Disposition': 'attachment; filename="stock_export.csv"'
+  });
+  c.res.end(csv);
+});
+// GET /api/stock/aging — stock aging report (must be before :productId)
+route('GET', '/api/stock/aging', (c) => ok(c.res, ext.stockAging()));
+
 route('GET', '/api/stock', (c) => ok(c.res, rows(`
   SELECT ib.product_id, p.code, p.name, p.brand, p.barcode, p.photo_url, w.code wh_code, w.name wh_name,
          ib.physical, ib.reserved, (ib.physical - ib.reserved) available, ib.avg_cost,
