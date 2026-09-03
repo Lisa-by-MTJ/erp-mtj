@@ -142,18 +142,18 @@ views.dash = async () => {
       ${gcell(`<div class="klbl" style="color:var(--mut);font-size:10.5px;text-transform:uppercase;letter-spacing:.07em">12-Month Sales Trend</div><div class="minibars">${bars}</div>`, { span: 4 })}
       ${gcell(`<div class="klbl" style="color:var(--mut);font-size:10.5px;text-transform:uppercase;letter-spacing:.07em">Top Products</div><div style="font-size:11.5px;line-height:1.9">${tops}</div>`, { span: 2 })}
     </div>
-    <div class="srow"><div class="rn">10</div>
+    <div class="srow"><div class="rn">12</div>
       ${gcell(`<div class="klbl" style="color:var(--mut);font-size:10.5px;text-transform:uppercase;letter-spacing:.07em">Top Customers</div><div style="font-size:11.5px;line-height:1.9">${custs}</div>`, { span: 2 })}
       ${gcell(`<div class="klbl" style="color:var(--mut);font-size:10.5px;text-transform:uppercase;letter-spacing:.07em">Recent Activity</div><div class="feedbox" style="border:none;padding:2px 0;max-height:150px">${feed || '<span class="dim">no activity yet</span>'}</div>`, { span: 4 })}
     </div>
-    ${d.low_stock.length ? `<div class="srow"><div class="rn">11</div>${gcell(
+    ${d.low_stock.length ? `<div class="srow"><div class="rn">13</div>${gcell(
       `<table><tr><th>Code</th><th>Product</th><th>Warehouse</th><th class="money">Available</th><th class="money">Reorder Pt</th></tr>
       ${d.low_stock.map(r => `<tr><td><a href="#" onclick="go('item-${r.id}');return false" style="color:inherit"><b>${esc(r.code)}</b></a></td>
         <td>${esc(r.name)} <span class="mut">${esc(r.brand || '')}</span></td><td>${esc(r.wh_name)}</td>
         <td class="money"><b class="low">${r.available}</b></td><td class="money">${r.reorder_point}</td></tr>`).join('')}</table>`, { span: 6 })}</div>` : ''}
 
-    <div class="srow"><div class="rn">12</div>${sec('Service · Warranty · Field')}</div>
-    <div class="srow"><div class="rn">13</div>
+    <div class="srow"><div class="rn">14</div>${sec('Service · Warranty · Field')}</div>
+    <div class="srow"><div class="rn">15</div>
       ${kcell('Open Service', s.open_service, { go: 'warranty' })}
       ${kcell('Completed Service', s.completed_service, { go: 'warranty' })}
       ${kcell('Active Warranty', s.active_warranty, { go: 'warranty' })}
