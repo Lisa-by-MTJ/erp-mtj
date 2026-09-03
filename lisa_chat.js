@@ -65,9 +65,19 @@ function priceAnswer(p) {
 }
 
 // ---- keyword intents (checked first; fast + always factual) ----
-const has = (q, ...words) => words.some(w => q.includes(w));
+// Explanatory / conversational questions go to the LLM instead of raw dumps.
+const isExplanatory = (m) => {
+  const markers = ['apa itu', 'apa maksud', 'maksudnya', 'jelaskan', 'mengapa', 'kenapa', 'bagaimana', 'gimana',
+    'tolong jelaskan', 'ringkas', 'rangkum', 'buat apa', 'kegunaan', 'fungsi dari', 'bedanya', 'perbedaan',
+    'bisa tolong', 'bisa bantu', 'ceritakan', 'apa kabar', 'makasih', 'terima kasih', 'hai', 'halo', 'hi '];
+  if (markers.some(x => m.includes(x))) return true;
+  if (m.includes('?') || m.includes('？')) return true;
+  const words = m.split(/\s+/).filter(Boolean);
+  return words.length >= 7; // long natural-language phrasing -> LLM
+};
 function route(q) {
   const m = q.toLowerCase();
+  if (isExplanatory(m)) return { kind: 'unknown' }; // let the LLM handle it
   if (has(m, 'low stock', 'reorder', 'restock', 'hampir habis', 'stok menipis')) return { kind: 'lowstock' };
   if (has(m, 'stok', 'stock', 'sisa', 'available', 'tersedia') && !has(m, 'nilai', 'value'))
     return { kind: 'stock' };
