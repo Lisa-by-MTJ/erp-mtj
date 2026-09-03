@@ -182,16 +182,19 @@ function erpSnapshot() {
   try {
     const wh = rows(`SELECT code, name, type FROM warehouses WHERE is_active = 1 ORDER BY code`);
     const s = one(`SELECT COALESCE(SUM(physical * avg_cost),0) v FROM inventory_balances`) || {};
-    const top = rows(`SELECT p.code, p.name, p.brand, ib.physical, ib.reserved
+    const top = rows(`SELECT p.code, p.name, p.brand, ib.physical, ib.reserved,
+        p.retail_price, p.project_price, p.cost_price
       FROM inventory_balances ib JOIN products p ON p.id = ib.product_id
       ORDER BY (ib.physical - ib.reserved) DESC LIMIT 8`);
     const low = ext.lowStock(5);
+    const sales = ext.salesByPeriod('ytd');
     const items = ext.actionItems();
     return JSON.stringify({
       warehouses: wh.map(w => `${w.code} ${w.name}`),
       stock_value: rp(s.v),
-      top_stock: top.map(t => `${t.code} ${t.name} (${t.brand || '-'}): avail ${t.physical - t.reserved}`),
+      top_stock: top.map(t => `${t.code} ${t.name} (${t.brand || '-'}): avail ${t.physical - t.reserved} | retail ${rp(t.retail_price)} / project ${rp(t.project_price)} / modal ${rp(t.cost_price)}`),
       low_stock: low.map(r => `${r.code} avail ${r.available} / reorder ${r.reorder_point}`),
+      sales_ytd: `${rp(sales.s)} (${sales.c} order)`,
       pending_docs: items.length
     });
   } catch (e) { return '{}'; }
@@ -202,7 +205,8 @@ async function llmReply(q) {
   if (!OR_KEY || !OR_MODELS.length) return null;
   const ctx = erpSnapshot();
   const system = `Kamu adalah Lisa, asisten internal ERP PT Monalisa Tunggal Jaya (PT MTJ) — distributor lighting, audio & LED profesional sejak 1980. ` +
-    `Persona: wanita, profesional, sedikit sarkas, to the point. Bahasa: Indonesia santai tapi rapi. ` +
+    `Persona: wanita, profesional, sedikit sarkas, to the point. ` +
+    `BAHASA: WAJIB Bahasa Indonesia saja. Jangan gunakan bahasa Inggris, Mandarin, atau bahasa lain dalam jawaban. ` +
     `Jawab SINGKAT (2-4 kalimat). JANGAN mengarang angka atau fakta — pakai hanya data ERP di bawah. ` +
     `Kalau pertanyaan butuh data yang tidak ada di snapshot, arahkan user pakai keyword: stok, harga, sales, approve, low stock, gudang, customer, follow-up. ` +
     `Jika ditanya di luar ERP (candaan, cuaca, umum), jawab ramah singkat tanpa mengarang data MTJ.\n\n` +
