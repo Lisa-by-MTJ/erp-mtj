@@ -718,6 +718,7 @@ route('GET', '/api/dashboard2', (c) => {
     sales_period: ext.salesByPeriod(period),
     sales_compare: ext.salesComparison(period),
     billing_aging: ext.billingAging(),
+    warehouse_summary: ext.warehouseSummary(),
     crm: crmMod.summary(),
     period,
   };
