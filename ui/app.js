@@ -316,7 +316,7 @@ views.stock = async () => {
     if (!r.brand) continue;
     let k = r.brand.toUpperCase();
     // merge family spellings into one filter: PROEL SOUND/STAGE/EIKON... -> PROEL
-    const fam = k.match(/^(PROEL|AZTEC|MARTIN|EIKON|ROBE|CHAUVET|SOROT|OSRAM|HILL AUDIO|CELTO|CORNERED|RESOLUME|MADRIX)(\s|$)/);
+    const fam = k.match(/^(PROEL|AZTEC|MARTIN|EIKON|ROBE|CHAUVET|SOROT|OSRAM|HILL AUDIO|CELTO|CORNERED|RESOLUME|MADRIX|BOHLAM)(\s|$)/);
     if (fam) k = fam[1];
     const cur = bmap.get(k);
     if (cur) { cur.n++; if (r.brand.toUpperCase() === k && cur.disp !== k) cur.disp = r.brand; }
@@ -330,7 +330,7 @@ views.stock = async () => {
 };
 const brandKey = s => {
   const k = (s || '').toUpperCase();
-  const fam = k.match(/^(PROEL|AZTEC|MARTIN|EIKON|ROBE|CHAUVET|SOROT|OSRAM|HILL AUDIO|CELTO|CORNERED|RESOLUME|MADRIX)(\s|$)/);
+  const fam = k.match(/^(PROEL|AZTEC|MARTIN|EIKON|ROBE|CHAUVET|SOROT|OSRAM|HILL AUDIO|CELTO|CORNERED|RESOLUME|MADRIX|BOHLAM)(\s|$)/);
   return fam ? fam[1] : k;
 };
 window.renderStock = () => {
