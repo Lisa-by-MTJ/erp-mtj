@@ -38,7 +38,14 @@ function snapshot() {
     active_warranty: cnt(`SELECT COUNT(*) c FROM warranties WHERE status='ACTIVE' AND warranty_end>=date('now')`),
     warranty_claims: cnt(`SELECT COUNT(*) c FROM warranty_claims WHERE status NOT IN ('CLOSED','REJECTED')`),
     open_work_orders: cnt(`SELECT COUNT(*) c FROM work_orders WHERE status NOT IN ('POSTED','REJECTED')`),
-    active_projects: cnt(`SELECT COUNT(*) c FROM projects WHERE status IN ('CONTRACTED','IN_PROGRESS','DELIVERED','BILLING')`)
+    active_projects: cnt(`SELECT COUNT(*) c FROM projects WHERE status IN ('CONTRACTED','IN_PROGRESS','DELIVERED','BILLING')`),
+    // Invoice AR alerts
+    overdue_invoices: cnt(`SELECT COUNT(*) c FROM invoices WHERE status = 'OVERDUE' OR (due_date < date('now') AND status = 'UNPAID')`),
+    overdue_amount: sum(`SELECT COALESCE(SUM(amount), 0) s FROM invoices WHERE status = 'OVERDUE' OR (due_date < date('now') AND status = 'UNPAID')`),
+    upcoming_invoices: cnt(`SELECT COUNT(*) c FROM invoices WHERE status = 'UNPAID' AND due_date >= date('now') AND due_date <= date('now', '+14 days')`),
+    upcoming_amount: sum(`SELECT COALESCE(SUM(amount), 0) s FROM invoices WHERE status = 'UNPAID' AND due_date >= date('now') AND due_date <= date('now', '+14 days')`),
+    total_ar: sum(`SELECT COALESCE(SUM(amount), 0) s FROM invoices WHERE status != 'PAID'`),
+    total_received: sum(`SELECT COALESCE(SUM(amount), 0) s FROM invoices WHERE status = 'PAID'`)
   };
 }
 

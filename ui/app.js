@@ -156,6 +156,18 @@ views.dash = async () => {
     <div class="wcard"><span class="ic">🤝</span><div class="lbl">Open Leads</div>
       <div class="val nav" onclick="go('crm')">${d.crm.open_leads}</div>
       <div class="evo flat">${fmt(d.crm.open_value)} pipeline</div></div>
+    ${s.overdue_invoices > 0
+      ? `<div class="wcard warn"><span class="ic">🚨</span><div class="lbl">Overdue Invoices</div>
+         <div class="val nav" onclick="go('invoices')">${s.overdue_invoices}</div>
+         <div class="evo down">▼ ${fmt(s.overdue_amount)} past due</div></div>`
+      : `<div class="wcard"><span class="ic">✅</span><div class="lbl">Overdue Invoices</div>
+         <div class="val">0</div><div class="evo up">▲ all on track</div></div>`}
+    ${s.upcoming_invoices > 0
+      ? `<div class="wcard accent"><span class="ic">⏰</span><div class="lbl">Due Soon (14 days)</div>
+         <div class="val nav" onclick="go('invoices')">${s.upcoming_invoices}</div>
+         <div class="evo flat">${fmt(s.upcoming_amount)} upcoming</div></div>`
+      : `<div class="wcard"><span class="ic">📅</span><div class="lbl">Due Soon (14 days)</div>
+         <div class="val">0</div><div class="evo up">▲ none due soon</div></div>`}
   </div>
 
   <!-- Trend + Action items -->
@@ -1094,6 +1106,89 @@ window.go = async v => {
 })();
 document.querySelectorAll('nav a').forEach(a => a.onclick = () => go(a.dataset.v));
 // ---------------- Warehouses / Gudang (§18 per-warehouse view) ----------------
+views.invoices = async () => {
+  const params = new URLSearchParams(window.location.hash.split('?')[1] || '');
+  const statusFilter = params.get('status') || '';
+  const yearFilter = params.get('year') || '';
+  
+  let url = '/invoices?';
+  if (statusFilter) url += `status=${statusFilter}&`;
+  if (yearFilter) url += `year=${yearFilter}&`;
+  
+  const [invoices, summary] = await Promise.all([api(url), api('/invoices/summary')]);
+  
+  const fmtRp = v => 'Rp ' + Number(v || 0).toLocaleString('id-ID');
+  const statusBadge = s => {
+    const cls = { 'PAID': 'ok', 'OVERDUE': 'warn', 'UNPAID': 'accent' }[s] || 'gray';
+    return `<span class="badge ${cls}">${s}</span>`;
+  };
+  const daysUntil = d => {
+    if (!d) return '—';
+    const diff = Math.ceil((new Date(d) - new Date()) / 86400000);
+    if (diff < 0) return `<span class="warn">${Math.abs(diff)}d overdue</span>`;
+    if (diff === 0) return '<span class="accent">Due today</span>';
+    return `<span class="ok">${diff}d left</span>`;
+  };
+  
+  const rows = invoices.map(inv => `<tr>
+    <td><b>${esc(inv.invoice_no)}</b></td>
+    <td>${esc(inv.customer_name)}</td>
+    <td class="mut">${esc(inv.city || '')}</td>
+    <td class="mut">${esc(inv.sales_person || '')}</td>
+    <td>${esc(inv.invoice_date || '—')}</td>
+    <td>${esc(inv.due_date || '—')}</td>
+    <td class="money">${fmtRp(inv.amount)}</td>
+    <td>${statusBadge(inv.status)}</td>
+    <td>${daysUntil(inv.due_date)}</td>
+  </tr>`).join('');
+  
+  const statusBtn = (label, val) => 
+    `<button class="btn sm ${(statusFilter === val || (!statusFilter && !val)) ? '' : 'gray'}" 
+     onclick="go('invoices${val ? '?status=' + val : ''}')">${label}</button>`;
+  
+  main.innerHTML = `
+  <div class="viewhead"><h1>📑 Accounts Receivable / Invoices</h1></div>
+  <div class="sub">PT Alvinity Solusindo Jaya · AR Ledger · Data from 2. Alvinity Account Receivable.xlsx</div>
+  
+  <!-- Summary cards -->
+  <div class="kpi-grid" style="margin:16px 0">
+    <div class="wcard"><span class="ic">💰</span><div class="lbl">Total AR</div>
+      <div class="val">${fmtRp(summary.total_receivable)}</div></div>
+    <div class="wcard"><span class="ic">✅</span><div class="lbl">Total Received</div>
+      <div class="val">${fmtRp(summary.total_received)}</div></div>
+    ${summary.overdue_count > 0
+      ? `<div class="wcard warn"><span class="ic">🚨</span><div class="lbl">Overdue</div>
+         <div class="val">${summary.overdue_count} invoices</div>
+         <div class="evo down">${fmtRp(summary.overdue_amount)}</div></div>`
+      : `<div class="wcard"><span class="ic">✅</span><div class="lbl">Overdue</div><div class="val">0</div></div>`}
+    ${summary.upcoming_count > 0
+      ? `<div class="wcard accent"><span class="ic">⏰</span><div class="lbl">Due Soon (14d)</div>
+         <div class="val">${summary.upcoming_count} invoices</div>
+         <div class="evo flat">${fmtRp(summary.upcoming_amount)}</div></div>`
+      : `<div class="wcard"><span class="ic">📅</span><div class="lbl">Due Soon</div><div class="val">0</div></div>`}
+  </div>
+  
+  <!-- Filters -->
+  <div style="display:flex;gap:8px;margin:12px 0;flex-wrap:wrap">
+    ${statusBtn('All', '')}
+    ${statusBtn('🚨 Overdue', 'OVERDUE')}
+    ${statusBtn('⏰ Unpaid', 'UNPAID')}
+    ${statusBtn('✅ Paid', 'PAID')}
+  </div>
+  
+  <!-- Table -->
+  <div style="overflow-x:auto">
+  <table class="do-tbl" style="width:100%">
+    <thead><tr>
+      <th>Invoice #</th><th>Customer</th><th>City</th><th>Sales</th>
+      <th>Invoice Date</th><th>Due Date</th><th class="money">Amount</th>
+      <th>Status</th><th>Days</th>
+    </tr></thead>
+    <tbody>${rows || '<tr><td colspan="9" class="mut" style="text-align:center;padding:24px">No invoices found</td></tr>'}</tbody>
+  </table>
+  </div>
+  `;
+};
 views.warehouses = async () => {
   const [whs, stock] = await Promise.all([api('/warehouses'), api('/stock')]);
   const byWh = {};

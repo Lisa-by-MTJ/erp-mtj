@@ -1005,6 +1005,49 @@ route('GET', '/api/docs/:table/:id/template', (c) => {
 // POST /api/sync/drive — trigger drive stock sync (placeholder)
 route('POST', '/api/sync/drive', (c) => ok(c.res, { status: 'ok', message: 'Sync triggered. Check /api/stock for updated data.' }));
 
+// ================= INVOICES / ACCOUNTS RECEIVABLE =================
+route('GET', '/api/invoices', (c) => {
+  const status = c.url.searchParams.get('status');
+  const year = c.url.searchParams.get('year');
+  const customer = c.url.searchParams.get('customer');
+  let sql = 'SELECT * FROM invoices WHERE 1=1';
+  const params = [];
+  if (status) { sql += ' AND status = ?'; params.push(status.toUpperCase()); }
+  if (year) { sql += ' AND ledger_year = ?'; params.push(Number(year)); }
+  if (customer) { sql += ' AND customer_name LIKE ?'; params.push(`%${customer}%`); }
+  sql += ' ORDER BY invoice_date DESC';
+  return ok(c.res, rows(sql, ...params));
+});
+
+route('GET', '/api/invoices/overdue', (c) => {
+  const today = new Date().toISOString().slice(0, 10);
+  return ok(c.res, rows(
+    `SELECT * FROM invoices WHERE status = 'OVERDUE' OR (due_date < ? AND status = 'UNPAID') ORDER BY due_date ASC`, today));
+});
+
+route('GET', '/api/invoices/upcoming', (c) => {
+  const today = new Date().toISOString().slice(0, 10);
+  return ok(c.res, rows(
+    `SELECT * FROM invoices WHERE status = 'UNPAID' AND due_date >= ? AND due_date <= date(?, '+14 days') ORDER BY due_date ASC`, today, today));
+});
+
+route('GET', '/api/invoices/summary', (c) => {
+  const today = new Date().toISOString().slice(0, 10);
+  const summary = {};
+  // By status
+  summary.by_status = rows('SELECT status, COUNT(*) as count, SUM(amount) as total_amount, SUM(aging_current + aging_1_30 + aging_31_60 + aging_61_90 + aging_older) as unpaid_amount FROM invoices GROUP BY status');
+  // Overdue count
+  summary.overdue_count = one(`SELECT COUNT(*) as cnt FROM invoices WHERE status = 'OVERDUE' OR (due_date < ? AND status = 'UNPAID')`, today).cnt;
+  summary.overdue_total = one(`SELECT COALESCE(SUM(amount), 0) as total FROM invoices WHERE status = 'OVERDUE' OR (due_date < ? AND status = 'UNPAID')`, today).total;
+  // Upcoming due (next 14 days)
+  summary.upcoming_count = one(`SELECT COUNT(*) as cnt FROM invoices WHERE status = 'UNPAID' AND due_date >= ? AND due_date <= date(?, '+14 days')`, today, today).cnt;
+  summary.upcoming_total = one(`SELECT COALESCE(SUM(amount), 0) as total FROM invoices WHERE status = 'UNPAID' AND due_date >= ? AND due_date <= date(?, '+14 days')`, today, today).total;
+  // Total AR
+  summary.total_receivable = one('SELECT COALESCE(SUM(amount), 0) as total FROM invoices WHERE status != \'PAID\'').total;
+  summary.total_received = one('SELECT COALESCE(SUM(amount), 0) as total FROM invoices WHERE status = \'PAID\'').total;
+  return ok(c.res, summary);
+});
+
 
 // ---------- dispatcher ----------
 async function handle(req, res, url, user) {
