@@ -137,6 +137,13 @@ function customer360(id) {
     totals: {
       orders: one(`SELECT COUNT(*) n, COALESCE(SUM(grand_total),0) v FROM sales_orders WHERE customer_id = ? AND status = 'POSTED'`, id),
       outstanding: one(`SELECT COALESCE(SUM(grand_total - COALESCE(paid_amount,0)),0) v FROM sales_orders WHERE customer_id = ? AND status = 'POSTED'`, id),
+      // AR outstanding from invoices table (matches by customer name)
+      ar_outstanding: one(`SELECT COALESCE(SUM(amount),0) v FROM invoices WHERE customer_name LIKE ? AND status != 'PAID'`,
+        `%${c.name}%`),
+      ar_overdue: one(`SELECT COALESCE(SUM(amount),0) v FROM invoices WHERE customer_name LIKE ? AND (status = 'OVERDUE' OR (due_date < date('now') AND status = 'UNPAID'))`,
+        `%${c.name}%`),
+      invoices: rows(`SELECT invoice_no, amount, status, due_date, invoice_date FROM invoices WHERE customer_name LIKE ? ORDER BY invoice_date DESC LIMIT 10`,
+        `%${c.name}%`),
     },
   };
 }

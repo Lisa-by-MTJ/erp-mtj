@@ -1039,8 +1039,23 @@ views.crm360 = async id => {
     ${kpiCard('Outstanding (SO)', rp2(d.totals.outstanding.v), d.totals.outstanding.v > 0 ? 'amber' : '')}
     ${kpiCard('Projects', d.projects.length)}
   </div>
+  ${d.totals.ar_outstanding > 0 || d.totals.ar_overdue > 0 ? `
+  <div class="grid" style="grid-template-columns:repeat(3,1fr);margin-top:12px">
+    ${kpiCard('AR Outstanding', rp2(d.totals.ar_outstanding), d.totals.ar_outstanding > 0 ? 'red' : '')}
+    ${kpiCard('AR Overdue', rp2(d.totals.ar_overdue), d.totals.ar_overdue > 0 ? 'red' : '')}
+    ${kpiCard('AR Invoices', d.totals.invoices.length)}
+  </div>` : ''}
   ${tbl('Quotations', d.quotations, [['Doc', ino], ['Date', r => r.quote_date], ['Total', r => rp2(r.grand_total)], ['Status', r => badge(r.status)]])}
   ${tbl('Sales Orders', d.sales_orders, [['Doc', ino], ['Date', r => r.so_date], ['Type', r => r.sales_type], ['Total', r => rp2(r.grand_total)], ['Paid', r => rp2(r.paid_amount)], ['Status', r => badge(r.status)]])}
+  ${d.totals.invoices.length ? `<h2>📑 Invoices / AR</h2>
+  <table><tr><th>Invoice #</th><th>Date</th><th>Due Date</th><th class="money">Amount</th><th>Status</th></tr>
+  ${d.totals.invoices.map(inv => `<tr>
+    <td><b>${esc(inv.invoice_no)}</b></td>
+    <td>${esc(inv.invoice_date || '—')}</td>
+    <td>${esc(inv.due_date || '—')}</td>
+    <td class="money">${rp2(inv.amount)}</td>
+    <td>${badge(inv.status)}</td>
+  </tr>`).join('')}</table>` : ''}
   ${tbl('Projects', d.projects, [['Code', r => `<b>${esc(r.project_code)}</b>`], ['Name', r => esc(r.name)], ['Contract', r => rp2(r.contract_value)], ['Status', r => badge(r.status)]])}
   ${tbl('Warranties', d.warranties, [['No', r => `<b>${esc(r.warranty_no)}</b>`], ['Start', r => r.warranty_start], ['End', r => r.warranty_end], ['Status', r => badge(r.status)]])}
   ${tbl('Service Orders', d.service_orders, [['Doc', r => `<b>${esc(r.doc_no)}</b>`], ['Received', r => r.received_at], ['Complaint', r => esc((r.complaint || '').slice(0, 40))], ['Status', r => badge(r.status)]])}
